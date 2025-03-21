@@ -121,12 +121,12 @@ class OrderBook:
                 # No matching order was found, so the new order enters the order book.  Notify the agent.
                 self.enter_order(deepcopy(order), quiet=quiet)
 
-                logger.debug("ACCEPTED: new order {}", order)
+                logger.debug("ACCEPTED: new order {}".format(order))
                 logger.debug(
-                    "SENT: notifications of order acceptance to agent {} for order {}",
+                    "SENT: notifications of order acceptance to agent {} for order {}".format(
                     order.agent_id,
                     order.order_id,
-                )
+                ))
 
                 if not quiet:
                     self.owner.send_message(order.agent_id, OrderAcceptedMsg(order))
@@ -155,7 +155,7 @@ class OrderBook:
             trade_qty = 0
             trade_price = 0
             for q, p in executed:
-                logger.debug("Executed: {} @ {}", q, p)
+                logger.debug("Executed: {} @ {}".format( q, p))
                 trade_qty += q
                 trade_price += p * q
 
@@ -304,15 +304,15 @@ class OrderBook:
             order.quantity -= filled_order.quantity
 
             logger.debug(
-                "MATCHED: new order {} vs old order {}", filled_order, matched_order
+                "MATCHED: new order {} vs old order {}".format(filled_order, matched_order)
             )
             logger.debug(
-                "SENT: notifications of order execution to agents {} and {} for orders {} and {}",
+                "SENT: notifications of order execution to agents {} and {} for orders {} and {}".format(
                 filled_order.agent_id,
                 matched_order.agent_id,
                 filled_order.order_id,
                 matched_order.order_id,
-            )
+            ))
 
             self.owner.send_message(
                 matched_order.agent_id, OrderExecutedMsg(matched_order)
@@ -452,12 +452,12 @@ class OrderBook:
                 if price_level.is_empty:
                     del book[i]
 
-                logger.debug("CANCELLED: order {}", order)
+                logger.debug("CANCELLED: order {}".format( order))
                 logger.debug(
-                    "SENT: notifications of order cancellation to agent {} for order {}",
+                    "SENT: notifications of order cancellation to agent {} for order {}".format(
                     cancelled_order.agent_id,
                     cancelled_order.order_id,
-                )
+                ))
 
                 if cancelled_order.is_price_to_comply:
                     self.cancel_order(metadata["ptc_other_half"], quiet=True)
@@ -519,12 +519,12 @@ class OrderBook:
                     )
                 )
 
-                logger.debug("MODIFIED: order {}", order)
+                logger.debug("MODIFIED: order {}".format(order))
                 logger.debug(
-                    "SENT: notifications of order modification to agent {} for order {}",
+                    "SENT: notifications of order modification to agent {} for order {}".format(
                     new_order.agent_id,
                     new_order.order_id,
-                )
+                ))
                 self.owner.send_message(order.agent_id, OrderModifiedMsg(new_order))
 
                 self.last_update_ts = self.owner.current_time
@@ -572,12 +572,12 @@ class OrderBook:
                     )
                 )
 
-                logger.debug("CANCEL_PARTIAL: order {}", order)
+                logger.debug("CANCEL_PARTIAL: order {}".format(order))
                 logger.debug(
-                    "SENT: notifications of order partial cancellation to agent {} for order {}",
+                    "SENT: notifications of order partial cancellation to agent {} for order {}".format(
                     new_order.agent_id,
                     quantity,
-                )
+                ))
                 self.owner.send_message(
                     order.agent_id, OrderPartialCancelledMsg(new_order)
                 )

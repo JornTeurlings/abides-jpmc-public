@@ -13,7 +13,6 @@ from .message import Message, MessageBatch, WakeupMsg
 from .latency_model import LatencyModel
 from .utils import fmt_ts, str_to_ns
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -39,28 +38,28 @@ class Kernel:
     """
 
     def __init__(
-        self,
-        agents: List[Agent],
-        start_time: NanosecondTime = str_to_ns("09:30:00"),
-        stop_time: NanosecondTime = str_to_ns("16:00:00"),
-        default_computation_delay: int = 1,
-        default_latency: float = 1,
-        agent_latency: Optional[List[List[float]]] = None,
-        latency_noise: List[float] = [1.0],
-        agent_latency_model: Optional[LatencyModel] = None,
-        skip_log: bool = True,
-        seed: Optional[int] = None,
-        log_dir: Optional[str] = None,
-        custom_properties: Optional[Dict[str, Any]] = None,
-        random_state: Optional[np.random.RandomState] = None,
+            self,
+            agents: List[Agent],
+            start_time: NanosecondTime = str_to_ns("09:30:00"),
+            stop_time: NanosecondTime = str_to_ns("16:00:00"),
+            default_computation_delay: int = 1,
+            default_latency: float = 1,
+            agent_latency: Optional[List[List[float]]] = None,
+            latency_noise: List[float] = [1.0],
+            agent_latency_model: Optional[LatencyModel] = None,
+            skip_log: bool = True,
+            seed: Optional[int] = None,
+            log_dir: Optional[str] = None,
+            custom_properties: Optional[Dict[str, Any]] = None,
+            random_state: Optional[np.random.RandomState] = None,
     ) -> None:
         custom_properties = custom_properties or {}
 
         self.random_state: np.random.RandomState = (
-            random_state
-            or np.random.RandomState(
-                seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
-            )
+                random_state
+                or np.random.RandomState(
+            seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
+        )
         )
 
         # A single message queue to keep everything organized by increasing
@@ -95,14 +94,14 @@ class Kernel:
         self.gym_agents: List[Agent] = list(
             filter(
                 lambda agent: "CoreGymAgent"
-                in [c.__name__ for c in agent.__class__.__bases__],
+                              in [c.__name__ for c in agent.__class__.__bases__],
                 agents,
             )
         )
 
         # Temporary check until ABIDES-gym supports multiple gym agents
         assert (
-            len(self.gym_agents) <= 1
+                len(self.gym_agents) <= 1
         ), "ABIDES-gym currently only supports using one gym agent"
 
         logger.debug(f"Detected {len(self.gym_agents)} ABIDES-gym agents")
@@ -168,8 +167,8 @@ class Kernel:
         # agents.
         if agent_latency is None:
             self.agent_latency: List[List[float]] = [
-                [default_latency] * len(self.agents)
-            ] * len(self.agents)
+                                                        [default_latency] * len(self.agents)
+                                                    ] * len(self.agents)
         else:
             self.agent_latency = agent_latency
 
@@ -273,7 +272,7 @@ class Kernel:
         self.ttl_messages = 0
 
     def runner(
-        self, agent_actions: Optional[Tuple[Agent, List[Dict[str, Any]]]] = None
+            self, agent_actions: Optional[Tuple[Agent, List[Dict[str, Any]]]] = None
     ) -> Dict[str, Any]:
         """
         Start the simulation and processing of the message queue.
@@ -298,9 +297,9 @@ class Kernel:
         # be again, because agents only "wake" in response to messages), or until
         # the kernel stop time is reached.
         while (
-            not self.messages.empty()
-            and self.current_time
-            and (self.current_time <= self.stop_time)
+                not self.messages.empty()
+                and self.current_time
+                and (self.current_time <= self.stop_time)
         ):
             # Get the next message in timestamp order (delivery time) and extract it.
             self.current_time, event = self.messages.get()
@@ -315,7 +314,7 @@ class Kernel:
                         fmt_ts(self.current_time),
                         self.ttl_messages,
                         (
-                            datetime.now() - self.event_queue_wall_clock_start
+                                datetime.now() - self.event_queue_wall_clock_start
                         ).total_seconds(),
                     )
                 )
@@ -364,8 +363,8 @@ class Kernel:
 
                 # Delay the agent by its computation delay plus any transient additional delay requested.
                 self.agent_current_times[recipient_id] += (
-                    self.agent_computation_delays[recipient_id]
-                    + self.current_agent_additional_delay
+                        self.agent_computation_delays[recipient_id]
+                        + self.current_agent_additional_delay
                 )
 
                 if self.show_trace_messages:
@@ -411,8 +410,8 @@ class Kernel:
                 for message in messages:
                     # Delay the agent by its computation delay plus any transient additional delay requested.
                     self.agent_current_times[recipient_id] += (
-                        self.agent_computation_delays[recipient_id]
-                        + self.current_agent_additional_delay
+                            self.agent_computation_delays[recipient_id]
+                            + self.current_agent_additional_delay
                     )
 
                     if self.show_trace_messages:
@@ -455,7 +454,7 @@ class Kernel:
         event_queue_wall_clock_stop = datetime.now()
 
         event_queue_wall_clock_elapsed = (
-            event_queue_wall_clock_stop - self.event_queue_wall_clock_start
+                event_queue_wall_clock_stop - self.event_queue_wall_clock_start
         )
 
         # Event notification for kernel end (agents may communicate with
@@ -526,7 +525,7 @@ class Kernel:
         self.runner()
 
     def send_message(
-        self, sender_id: int, recipient_id: int, message: Message, delay: int = 0
+            self, sender_id: int, recipient_id: int, message: Message, delay: int = 0
     ) -> None:
         """
         Called by an agent to send a message to another agent.
@@ -560,10 +559,10 @@ class Kernel:
         # delay PLUS any accumulated delay for this wake cycle PLUS any one-time
         # requested delay for this specific message only.
         sent_time = (
-            self.current_time
-            + self.agent_computation_delays[sender_id]
-            + self.current_agent_additional_delay
-            + delay
+                self.current_time
+                + self.agent_computation_delays[sender_id]
+                + self.current_agent_additional_delay
+                + delay
         )
 
         # Apply communication delay per the agent_latency_model, if defined, or the
@@ -617,7 +616,7 @@ class Kernel:
             logger.debug("Message queued: {}".format(message))
 
     def set_wakeup(
-        self, sender_id: int, requested_time: Optional[NanosecondTime] = None
+            self, sender_id: int, requested_time: Optional[NanosecondTime] = None
     ) -> None:
         """
         Called by an agent to receive a "wakeup call" from the kernel at some requested
@@ -743,7 +742,7 @@ class Kernel:
         return [agent.id for agent in self.agents if isinstance(agent, agent_type)]
 
     def write_log(
-        self, sender_id: int, df_log: pd.DataFrame, filename: Optional[str] = None
+            self, sender_id: int, df_log: pd.DataFrame, filename: Optional[str] = None
     ) -> None:
         """
         Called by any agent, usually at the very end of the simulation just before
@@ -772,7 +771,7 @@ class Kernel:
         if self.skip_log:
             return
 
-        path = os.path.join(".", "log", self.log_dir)
+        path = os.path.join("", "log", self.log_dir)
 
         if filename:
             file = "{}.bz2".format(filename)
@@ -804,7 +803,7 @@ class Kernel:
         )
 
     def write_summary_log(self) -> None:
-        path = os.path.join(".", "log", self.log_dir)
+        path = os.path.join("", "log", self.log_dir)
         file = "summary_log.bz2"
 
         if not os.path.exists(path):

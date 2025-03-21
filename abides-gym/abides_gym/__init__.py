@@ -1,4 +1,4 @@
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
 from ray.tune.registry import register_env
 
 from .envs import *
@@ -14,6 +14,16 @@ register(
 register(
     id="markets-execution-v0",
     entry_point=SubGymMarketsExecutionEnv_v0,
+)
+
+register(
+    id="markets-execution-thesis-v0",
+    entry_point=SubGymMarketsExecutionEnvThesis_v0
+)
+
+register(
+    id="markets-execution-thesis-discrete",
+    entry_point=SubGymMarketsExecutionEnvThesisDiscrete
 )
 
 

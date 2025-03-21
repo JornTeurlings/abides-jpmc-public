@@ -87,7 +87,7 @@ class NoiseAgent(TradingAgent):
             # final (real) fundamental value times shares held.
             surplus = rT * H
 
-            logger.debug("Surplus after holdings: {}", surplus)
+            logger.debug("Surplus after holdings: {}".format(surplus))
 
             # Add ending cash value and subtract starting cash value.
             surplus += self.holdings["CASH"] - self.starting_cash
@@ -96,14 +96,14 @@ class NoiseAgent(TradingAgent):
             self.logEvent("FINAL_VALUATION", surplus, True)
 
             logger.debug(
-                "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}",
+                "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}".format(
                 self.name,
                 H,
                 self.holdings["CASH"],
                 self.starting_cash,
                 rT,
                 surplus,
-            )
+            ))
 
     def wakeup(self, current_time: NanosecondTime) -> None:
         # Parent class handles discovery of exchange times and market_open wakeup call.
@@ -119,7 +119,7 @@ class NoiseAgent(TradingAgent):
                 self.trading = True
 
                 # Time to start trading!
-                logger.debug("{} is ready to start trading now.", self.name)
+                logger.debug("{} is ready to start trading now.".format(self.name))
 
         # Steady state wakeup behavior starts here.
 
