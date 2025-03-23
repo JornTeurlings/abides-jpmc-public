@@ -620,7 +620,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         #    fill_qty * (mid_price - fill_price_for_BUY)
         #    or handle sign if SELL.
         #######################################################
-        tp_t = self.compute_tpt(raw_state, mid_price)
+        beta = 2
+        tp_t = beta * self.compute_tpt(raw_state, mid_price)
 
         #######################################################
         # 4) Inventory Punishment (IP_t)

@@ -79,7 +79,7 @@ def fmt_ts(timestamp: NanosecondTime) -> str:
     """
     Converts a timestamp stored as nanoseconds into a human readable string.
     """
-    return pd.Timestamp(timestamp, unit="ns").strftime("%Y-%m-%d %H:%M:%s")
+    return pd.Timestamp(timestamp, unit="ns").strftime("%Y-%m-%d %H:%M:%S")
 
 
 def str_to_ns(string: str) -> NanosecondTime:
