@@ -1,2 +1,2 @@
-gym==0.18.3
-ray[rllib]==1.5.1
+gymnasium==0.28.1
+ray[rllib]==2.38.0

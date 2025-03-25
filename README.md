@@ -131,7 +131,7 @@ in the config file.
 ABIDES can also be run through a Gym interface using ABIDES-Gym environments.
 
 ```python
-import gym
+import gymnasium as gym
 import abides_gym
 
 env = gym.make(

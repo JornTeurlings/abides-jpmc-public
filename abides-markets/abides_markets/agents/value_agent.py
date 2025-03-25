@@ -91,7 +91,7 @@ class ValueAgent(TradingAgent):
         # final (real) fundamental value times shares held.
         surplus = rT * H
 
-        logger.debug("Surplus after holdings: {}", surplus)
+        logger.debug("Surplus after holdings: {}".format(surplus))
 
         # Add ending cash value and subtract starting cash value.
         surplus += self.holdings["CASH"] - self.starting_cash
@@ -100,14 +100,14 @@ class ValueAgent(TradingAgent):
         self.logEvent("FINAL_VALUATION", surplus, True)
 
         logger.debug(
-            "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}",
+            "{} final report.  Holdings: {}, end cash: {}, start cash: {}, final fundamental: {}, surplus: {}".format(
             self.name,
             H,
             self.holdings["CASH"],
             self.starting_cash,
             rT,
             surplus,
-        )
+        ))
 
     def wakeup(self, current_time: NanosecondTime) -> None:
         # Parent class handles discovery of exchange times and market_open wakeup call.
@@ -123,7 +123,7 @@ class ValueAgent(TradingAgent):
                 self.trading = True
 
                 # Time to start trading!
-                logger.debug("{} is ready to start trading now.", self.name)
+                logger.debug("{} is ready to start trading now.".format( self.name))
 
         # Steady state wakeup behavior starts here.
 
@@ -164,7 +164,7 @@ class ValueAgent(TradingAgent):
             random_state=self.random_state,
         )
 
-        logger.debug("{} observed {} at {}", self.name, obs_t, self.current_time)
+        logger.debug("{} observed {} at {}".format(self.name, obs_t, self.current_time))
 
         # Update internal estimates of the current fundamental value and our error of same.
 
@@ -219,7 +219,7 @@ class ValueAgent(TradingAgent):
         self.prev_wake_time = self.current_time
 
         logger.debug(
-            "{} estimates r_T = {} as of {}", self.name, r_T, self.current_time
+            "{} estimates r_T = {} as of {}".format(self.name, r_T, self.current_time)
         )
 
         return r_T

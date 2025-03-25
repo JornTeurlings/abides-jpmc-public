@@ -2,9 +2,9 @@ from copy import deepcopy
 from abc import abstractmethod, ABC
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
-from gym.utils import seeding
+from gymnasium.utils import seeding
 
 from abides_core import Kernel, NanosecondTime
 from abides_core.generators import InterArrivalTimeGenerator
@@ -18,12 +18,12 @@ class AbidesGymCoreEnv(gym.Env, ABC):
     """
 
     def __init__(
-        self,
-        background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
-        wakeup_interval_generator: InterArrivalTimeGenerator,
-        state_buffer_length: int,
-        first_interval: Optional[NanosecondTime] = None,
-        gymAgentConstructor=None,
+            self,
+            background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
+            wakeup_interval_generator: InterArrivalTimeGenerator,
+            state_buffer_length: int,
+            first_interval: Optional[NanosecondTime] = None,
+            gymAgentConstructor=None,
     ) -> None:
 
         self.background_config_pair: Tuple[
@@ -43,7 +43,8 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
         self.state: Optional[np.ndarray] = None
         self.reward: Optional[float] = None
-        self.done: Optional[bool] = None
+        self.truncated: Optional[bool] = None
+        self.terminated: Optional[bool] = None
         self.info: Optional[Dict[str, Any]] = None
 
     def reset(self):
@@ -56,7 +57,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         """
 
         # get seed to initialize random states for ABIDES
-        seed = self.np_random.randint(low=0, high=2 ** 32, dtype="uint64")
+        seed = self.np_random.integers(low=0, high=2 ** 32, dtype="uint64")
         # instanciate back ground config state
         background_config_args = self.background_config_pair[1]
         background_config_args.update(
@@ -101,7 +102,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.kernel = kernel
         return state
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
+    def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """
         The agent takes a step in the environment.
 
@@ -121,7 +122,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 varies between environments, but the goal is always to increase
                 your total reward.
 
-            done (bool) :
+            terminated (bool) :
                 whether it's time to reset the environment again. Most (but not
                 all) tasks are divided up into well-defined episodes, and done
                 being True indicates the episode has terminated. (For example,
@@ -159,7 +160,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
         self.info = self.raw_state_to_info(deepcopy(raw_state["result"]))
 
-        return (self.state, self.reward, self.done, self.info)
+        return (self.state, self.reward, self.done, False, self.info)
 
     def render(self, mode: str = "human") -> None:
         """Renders the environment.

@@ -1,6 +1,6 @@
 import importlib
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 from abc import ABC
 
 import gymnasium as gym
@@ -14,7 +14,7 @@ from abides_core.generators import ConstantTimeGenerator
 from .markets_environment import AbidesGymMarketsEnv
 
 
-class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
+class SubGymMarketsExecutionEnvThesisDiscrete(AbidesGymMarketsEnv):
     """
     Execution V0 environnement. It defines one of the ABIDES-Gym-markets environnement.
     This environment presents an example of the algorithmic orderexecution problem.
@@ -88,23 +88,23 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         num_max_steps_per_episode: float = 0
 
     def __init__(
-        self,
-        background_config: Any = "rmsc04",
-        mkt_close: str = "16:00:00",
-        timestep_duration: str = "60s",
-        starting_cash: int = 1_000_000,
-        order_fixed_size: int = 10,
-        state_history_length: int = 4,
-        market_data_buffer_length: int = 5,
-        first_interval: str = "00:00:30",
-        parent_order_size: int = 1000,
-        execution_window: str = "00:10:00",
-        direction: str = "BUY",
-        not_enough_reward_update: int = -1000,
-        too_much_reward_update: int = -100,
-        just_quantity_reward_update: int = 0,
-        debug_mode: bool = False,
-        background_config_extra_kvargs: Dict[str, Any] = {},
+            self,
+            background_config: Any = "rmsc04",
+            mkt_close: str = "16:00:00",
+            timestep_duration: str = "60s",
+            starting_cash: int = 1_000_000,
+            order_fixed_size: int = 10,
+            state_history_length: int = 4,
+            market_data_buffer_length: int = 5,
+            first_interval: str = "00:00:30",
+            parent_order_size: int = 1000,
+            execution_window: str = "00:10:00",
+            direction: str = "BUY",
+            not_enough_reward_update: int = -1000,
+            too_much_reward_update: int = -100,
+            just_quantity_reward_update: int = 0,
+            debug_mode: bool = False,
+            background_config_extra_kvargs: Dict[str, Any] = {},
     ) -> None:
         self.background_config: Any = importlib.import_module(
             "abides_markets.configs.{}".format(background_config), package=None
@@ -143,31 +143,31 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         ], "Select rmsc03 or rmsc04 as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
-            self.first_interval >= str_to_ns("00:00:00")
+                self.first_interval >= str_to_ns("00:00:00")
         ), "Select authorized FIRST_INTERVAL delay"
 
         assert (self.mkt_close <= str_to_ns("16:00:00")) & (
-            self.mkt_close >= str_to_ns("09:30:00")
+                self.mkt_close >= str_to_ns("09:30:00")
         ), "Select authorized market hours"
 
         assert (self.timestep_duration <= str_to_ns("06:30:00")) & (
-            self.timestep_duration >= str_to_ns("00:00:00")
+                self.timestep_duration >= str_to_ns("00:00:00")
         ), "Select authorized timestep_duration"
 
         assert (type(self.starting_cash) == int) & (
-            self.starting_cash >= 0
+                self.starting_cash >= 0
         ), "Select positive integer value for starting_cash"
 
         assert (type(self.order_fixed_size) == int) & (
-            self.order_fixed_size >= 0
+                self.order_fixed_size >= 0
         ), "Select positive integer value for order_fixed_size"
 
         assert (type(self.state_history_length) == int) & (
-            self.state_history_length >= 0
+                self.state_history_length >= 0
         ), "Select positive integer value for order_fixed_size"
 
         assert (type(self.market_data_buffer_length) == int) & (
-            self.market_data_buffer_length >= 0
+                self.market_data_buffer_length >= 0
         ), "Select positive integer value for order_fixed_size"
 
         assert self.debug_mode in [
@@ -181,22 +181,22 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         ], "direction needs to be BUY or SELL"
 
         assert (type(self.parent_order_size) == int) & (
-            self.order_fixed_size >= 0
+                self.order_fixed_size >= 0
         ), "Select positive integer value for parent_order_size"
 
         assert (self.execution_window <= str_to_ns("06:30:00")) & (
-            self.execution_window >= str_to_ns("00:00:00")
+                self.execution_window >= str_to_ns("00:00:00")
         ), "Select authorized execution_window"
 
         assert (
-            type(self.too_much_reward_update) == int
+                type(self.too_much_reward_update) == int
         ), "Select integer value for too_much_reward_update"
 
         assert (
-            type(self.not_enough_reward_update) == int
+                type(self.not_enough_reward_update) == int
         ), "Select integer value for not_enough_reward_update"
         assert (
-            type(self.just_quantity_reward_update) == int
+                type(self.just_quantity_reward_update) == int
         ), "Select integer value for just_quantity_reward_update"
 
         background_config_args = {"end_time": self.mkt_close}
@@ -258,8 +258,8 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
                 -2,  # holdings_pct
                 -2,  # time_pct
                 -4,  # diff_pct
-                0,  # imbalance_all
-                0,  # imbalance_5
+                -1,  # imbalance_all
+                -1,  # imbalance_5
                 np.finfo(np.float32).min,  # price_impact
                 np.finfo(np.float32).min,  # spread
                 np.finfo(np.float32).min,
@@ -279,7 +279,7 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market: int = self.starting_cash
 
     def _map_action_space_to_ABIDES_SIMULATOR_SPACE(
-        self, action: int
+            self, action: int
     ) -> List[Dict[str, Any]]:
         """
         utility function that maps open ai action definition (integers) to environnement API action definition (list of dictionaries)
@@ -325,7 +325,6 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
                 f"Action {action} is not part of the actions supported by the function."
             )
 
-
     @raw_state_to_state_pre_process
     def raw_state_to_state(self, raw_state: Dict[str, Any]) -> np.ndarray:
         """
@@ -353,7 +352,7 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         current_time = raw_state["internal_data"]["current_time"][-1]
         time_from_parent_arrival = current_time - mkt_open - self.first_interval
         assert (
-            current_time >= mkt_open + self.first_interval
+                current_time >= mkt_open + self.first_interval
         ), "Agent has woken up earlier than its first interval"
         # 2)c) time limit
         time_limit = self.execution_window
@@ -427,7 +426,7 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         ]
         returns = np.diff(mid_prices)
         padded_returns = np.zeros(self.state_history_length - 1)
-        padded_returns[-len(returns) :] = (
+        padded_returns[-len(returns):] = (
             returns if len(returns) > 0 else padded_returns
         )
 
@@ -526,21 +525,21 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         # 3) Compute update_reward
         if (self.direction == "BUY") and (holdings >= parent_order_size):
             update_reward = (
-                abs(holdings - parent_order_size) * self.too_much_reward_update
+                    abs(holdings - parent_order_size) * self.too_much_reward_update
             )  # executed buy too much
 
         elif (self.direction == "BUY") and (holdings < parent_order_size):
             update_reward = (
-                abs(holdings - parent_order_size) * self.not_enough_reward_update
+                    abs(holdings - parent_order_size) * self.not_enough_reward_update
             )  # executed buy not enough
 
         elif (self.direction == "SELL") and (holdings <= -parent_order_size):
             update_reward = (
-                abs(holdings - parent_order_size) * self.too_much_reward_update
+                    abs(holdings - parent_order_size) * self.too_much_reward_update
             )  # executed sell too much
         elif (self.direction == "SELL") and (holdings > -parent_order_size):
             update_reward = (
-                abs(holdings - parent_order_size) * self.not_enough_reward_update
+                    abs(holdings - parent_order_size) * self.not_enough_reward_update
             )  # executed sell not enough
         else:
             update_reward = self.just_quantity_reward_update
@@ -594,7 +593,7 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
             holdings if self.direction == "BUY" else -holdings
         )
         self.custom_metrics_tracker.remaining_quantity = (
-            parent_order_size - self.custom_metrics_tracker.executed_quantity
+                parent_order_size - self.custom_metrics_tracker.executed_quantity
         )
 
         return done
@@ -630,11 +629,20 @@ class SubGymMarketsExecutionEnv_v0(AbidesGymMarketsEnv):
         # 5) Holdings
         holdings = raw_state["internal_data"]["holdings"]
 
+        # 6) Volume on both sides
+        volume_bid = raw_state["parsed_volume_data"]["bid_volume"]
+        volume_ask = raw_state["parsed_volume_data"]["ask_volume"]
+        total_volume = volume_ask + volume_bid
+
         if self.debug_mode == True:
             return {
                 "last_transaction": last_transaction,
                 "best_bid": best_bid,
                 "best_ask": best_ask,
+                "volume_bid": volume_bid,
+                "volume_ask": volume_ask,
+                "total_volume": total_volume,
+                "mid_price": (best_bid + best_ask) / 2,
                 "current_time": current_time,
                 "holdings": holdings,
                 "parent_size": self.parent_order_size,

@@ -172,42 +172,103 @@ def get_volume(book: List[PriceLevel], depth: Optional[int] = None) -> int:
 def get_imbalance(
     bids: List[PriceLevel],
     asks: List[PriceLevel],
-    direction: str = "BUY",
     depth: Optional[int] = None,
 ) -> float:
     """
-    utility to compute the imbalance computed between the top of the book and the depth-th value of depth
+    Computes the Queue Imbalance (QI), which measures how liquidity is distributed
+    between the best bid and ask up to a given depth.
 
     Arguments:
-        - bids: list of list snapshot of bid side
-        - asks: list of list snapshot of ask side
-        - direction: side used to compute the numerator in the division
-        - depth: depth used to compute sum of the volume
+        - bids: List of PriceLevel tuples [(price, size), ...] representing the bid side.
+        - asks: List of PriceLevel tuples [(price, size), ...] representing the ask side.
+        - depth: Depth up to which to sum the volume (default: top-of-book only).
 
     Returns:
-        - imbalance
+        - QI: A float in the range [-1, 1], where:
+            - Positive values (closer to +1) indicate higher liquidity on the bid side.
+            - Negative values (closer to -1) indicate higher liquidity on the ask side.
+            - 0 means perfectly balanced book at that depth.
     """
-    # None corresponds to the whole book depth
-    if (bids == []) and (asks == []):
-        return 0.5
-    elif bids == []:
-        if direction == "BUY":
-            return 0
-        else:
-            return 1
-    elif asks == []:
-        if direction == "BUY":
-            return 1
-        else:
-            return 0
+    # Handle edge cases where order book is empty
+    if not bids and not asks:
+        return 0.0
+    elif not bids:
+        return -1.0  # No bids, fully ask-dominated
+    elif not asks:
+        return 1.0   # No asks, fully bid-dominated
+
+    # Sum volumes up to the specified depth (or all available levels if depth is None)
+    if depth is None:
+        bid_vol = sum(v[1] for v in bids)  # Summing all bid sizes
+        ask_vol = sum(v[1] for v in asks)  # Summing all ask sizes
     else:
-        if depth == None:
-            bid_vol = sum([v[1] for v in bids])
-            ask_vol = sum([v[1] for v in asks])
-        else:
-            bid_vol = sum([v[1] for v in bids[:depth]])
-            ask_vol = sum([v[1] for v in asks[:depth]])
-    if direction == "BUY":
-        return bid_vol / (bid_vol + ask_vol)
+        bid_vol = sum(v[1] for v in bids[:depth])  # Summing bid sizes up to depth
+        ask_vol = sum(v[1] for v in asks[:depth])  # Summing ask sizes up to depth
+
+    # Avoid division by zero
+    total_volume = bid_vol + ask_vol
+    if total_volume == 0:
+        return 0.0
+
+    # Compute Queue Imbalance
+    return (bid_vol - ask_vol) / total_volume
+
+
+def get_ml_ofi(
+        bids: List[PriceLevel],
+        prev_bids: List[PriceLevel],
+        asks: List[PriceLevel],
+        prev_asks: List[PriceLevel],
+        depth: Optional[int] = None
+):
+    """
+    Computes Multi-Level Order Flow Imbalance (MLOFI) for multiple levels of the order book.
+
+    Args:
+        - bid_prices:
+        - bid_sizes:
+        - ask_prices:
+        - ask_sizes:
+
+    Returns:
+        - List of lists containing MLOFI values for each level over time.
+    """
+
+    # We can only compute it upto a certain depth for which it is available
+    if depth is None:
+        max_depth = min(len(bids), len(prev_bids), len(asks), len(prev_asks))
     else:
-        return ask_vol / (bid_vol + ask_vol)
+        max_depth = min(len(bids), len(prev_bids), len(asks), len(prev_asks), depth)
+    mlofi_values = []
+
+    for m in range(max_depth):
+        # Extract price and size for bid and ask at level m
+        b_t, q_b_t = bids[m]  # Current best bid price and size
+        b_t_1, q_b_t_1 = prev_bids[m]  # Previous best bid price and size
+
+        a_t, q_a_t = asks[m]  # Current best ask price and size
+        a_t_1, q_a_t_1 = prev_asks[m]  # Previous best ask price and size
+
+        # Compute ΔW^m (Bid-side contribution)
+        if b_t > b_t_1:
+            delta_W = q_b_t
+        elif b_t == b_t_1:
+            delta_W = q_b_t - q_b_t_1
+        else:  # b_t < b_t_1
+            delta_W = -q_b_t_1
+
+        # Compute ΔV^m (Ask-side contribution)
+        if a_t > a_t_1:
+            delta_V = -q_a_t_1
+        elif a_t == a_t_1:
+            delta_V = q_a_t - q_a_t_1
+        else:  # a_t < a_t_1
+            delta_V = q_a_t
+
+        # Compute MLOFI for this level: e^m(τ_n) = ΔW^m(τ_n) - ΔV^m(τ_n)
+        e_m = delta_W - delta_V
+        mlofi_values.append(e_m)
+
+    return mlofi_values
+
+
