@@ -85,7 +85,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         top_of_the_book_liquidity: float = 0
         num_max_steps_per_episode: float = 0
         depth: int = 0
-        mlofi: list[float] = field(default_factory=list)
+        mtm_pnl: float = 0
+        cash: float = 0
+        holdings: float = 0
+        ml_ofi: list[float] = field(default_factory=list)
 
         dp_t: float = 0
         ip_t: float = 0
@@ -811,7 +814,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         reward = self.custom_metrics_tracker.reward
 
-        if self.debug_mode == True:
+        if self.debug_mode:
             return {
                 "last_transaction": last_transaction,
                 "best_bid": best_bid,
