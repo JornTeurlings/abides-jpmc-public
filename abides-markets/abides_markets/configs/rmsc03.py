@@ -49,7 +49,7 @@ def build_config(
     mm_window_size="adaptive",
     mm_min_order_size=1,
     mm_num_ticks=10,
-    mm_wake_up_freq=str_to_ns("10S"),
+    mm_wake_up_freq=str_to_ns("10s"),
     mm_skew_beta=0,
     mm_level_spacing=5,
     mm_spread_alpha=0.75,

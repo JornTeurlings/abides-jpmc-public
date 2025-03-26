@@ -659,7 +659,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 5) Combine for final reward
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
-        reward = (dp_t + tp_t - ip_t - tip_t + fr_t) / self.parent_order_size
+        reward = (dp_t + tp_t - ip_t - tip_t + fr_t) / (self.parent_order_size * 10)
 
         #######################################################
         # Add any other terms you want:
