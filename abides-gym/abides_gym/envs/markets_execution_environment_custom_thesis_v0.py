@@ -717,32 +717,19 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         parent_order_size = self.parent_order_size
 
         # 3) Compute update_reward
-        if (self.direction == "BUY") and (holdings >= parent_order_size):
+        if (holdings >= parent_order_size):
             update_reward = (
                     abs(holdings - parent_order_size) * self.too_much_reward_update
             )  # executed buy too much
-
-        elif (self.direction == "BUY") and (holdings < parent_order_size):
-            update_reward = (
-                    abs(holdings - parent_order_size) * self.not_enough_reward_update
-            )  # executed buy not enough
-
-        elif (self.direction == "SELL") and (holdings <= -parent_order_size):
+        elif (holdings <= -parent_order_size):
             update_reward = (
                     abs(holdings - parent_order_size) * self.too_much_reward_update
-            )  # executed sell too much
-        elif (self.direction == "SELL") and (holdings > -parent_order_size):
-            update_reward = (
-                    abs(holdings - parent_order_size) * self.not_enough_reward_update
-            )  # executed sell not enough
+            )  # executed sell too much # executed sell not enough
         else:
             update_reward = self.just_quantity_reward_update
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
-
-        # For now, simply turn it off to see what happens since the conditions are quite harsh
-        update_reward = 0
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
