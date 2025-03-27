@@ -60,7 +60,7 @@ def build_config(
     mm_window_size="adaptive",
     mm_pov=0.025,
     mm_num_ticks=10,
-    mm_wake_up_freq="60S",
+    mm_wake_up_freq="60s",
     mm_min_order_size=1,
     mm_skew_beta=0,
     mm_price_skew=4,
