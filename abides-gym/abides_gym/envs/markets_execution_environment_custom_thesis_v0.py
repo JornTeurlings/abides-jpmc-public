@@ -103,7 +103,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             mkt_close: str = "16:00:00",
             timestep_duration: str = "60s",
             starting_cash: int = 10_000_000,
-            order_fixed_size: int = 10,
+            order_fixed_size: int = 40,
             state_history_length: int = 10,
             market_data_buffer_length: int = 5,
             first_interval: str = "00:00:30",
@@ -333,8 +333,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 2) Compute absolute prices from offsets
         #    e.g., if offset is negative, quote inside; if positive, quote wide
-        reservation_price = mid_price - (1 if self.custom_metrics_tracker.holdings_pct >= 0 else -1) * \
-                            self.reservation_quote * mid_price * reservation_price_perc
+        reservation_price = mid_price -  self.reservation_quote * mid_price * reservation_price_perc
 
         bid_price = round(reservation_price - spread_per * mid_price * self.max_spread / 2)
         ask_price = round(reservation_price + spread_per * mid_price * self.max_spread / 2)
@@ -346,14 +345,14 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         instructions.append({
             "type": "LMT",
             "direction": "BUY",
-            "size": self.parent_order_size,
+            "size": self.order_fixed_size,
             "limit_price": bid_price
         })
 
         instructions.append({
             "type": "LMT",
             "direction": "SELL",
-            "size": self.parent_order_size,
+            "size": self.order_fixed_size,
             "limit_price": ask_price
         })
         self.orders_submitted += 2
@@ -506,9 +505,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         padded_ofi = np.zeros(self.ofi_lag)
         padded_ofi[-len(ofi_multi_time):] = ofi_multi_time if len(ofi_multi_time) > 0 else padded_ofi
 
-        # 10) The TP_t through actual trading PnL
-        tp_t = self.compute_tpt(raw_state, mid_price)
-
         # Set all previous values for computation of specific states
         self.previous_bids = bids[0]
         self.previous_asks = asks[0]
@@ -538,7 +534,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 spread,
                 short_term_vol,
                 top_of_book_liquidity,
-                tp_t,
+                self.custom_metrics_tracker.tp_t,
                 depth
             ]
             + ml_ofi
@@ -561,9 +557,21 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             mid_price = self.last_mid_price
         inter_wakeup_executed_orders = raw_state["internal_data"]["inter_wakeup_executed_orders"]
         tp_t = 0.0
-        if len(inter_wakeup_executed_orders) > 0 and isinstance(inter_wakeup_executed_orders[0], LimitOrder):
+        if len(inter_wakeup_executed_orders) > 0 and isinstance(inter_wakeup_executed_orders[-1], List):
+            for fill in inter_wakeup_executed_orders[-1]:
+                qty = fill.quantity if fill.side.value == 'BID' else -fill.quantity  # positive if you bought, negative if sold
+                f_px = fill.fill_price  # the fill price
+
+                # If you store +qty for a buy, then:
+                # For a buy, advantage = qty * (mid_price - fill_price).
+                # For a sell, advantage = qty * (fill_price - mid_price),
+                # but qty < 0 in that case. That means the same formula works:
+                #   "tp_t += qty * (mid_price - fill_price)"
+                # because if qty < 0, it's effectively fill_price - mid_price.
+                tp_t += qty * (mid_price - f_px)
+        elif len(inter_wakeup_executed_orders) > 0 and isinstance(inter_wakeup_executed_orders[-1], LimitOrder):
             for fill in inter_wakeup_executed_orders:
-                qty = fill.quantity  # positive if you bought, negative if sold
+                qty = fill.quantity if fill.side.value == 'BID' else -fill.quantity  # positive if you bought, negative if sold
                 f_px = fill.fill_price  # the fill price
 
                 # If you store +qty for a buy, then:
@@ -608,11 +616,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         delta_pnl_t = value_t - self.previous_marked_to_market
 
         # Dampened PnL
-        eta = 0.2  # example hyper-parameter, tune as needed
+        eta = 0.2
         if delta_pnl_t > 0:
             dp_t = delta_pnl_t * (1.0 - eta)
         else:
             dp_t = delta_pnl_t
+
+        qta = 0.5
+        # Reward scaling is necessay
+        dp_t *= qta
 
         # update for next step
         self.previous_marked_to_market = value_t
@@ -623,7 +635,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         #    fill_qty * (mid_price - fill_price_for_BUY)
         #    or handle sign if SELL.
         #######################################################
-        beta = 2
+        beta = 0.20
         tp_t = beta * self.compute_tpt(raw_state, mid_price)
 
         #######################################################
@@ -637,9 +649,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 5) Terminal Inventory Punishment (TIP_t)
         #    TIP_t = eta * (holdings^2)
         #######################################################
-        eta = self.terminal_inventory_penalty  # Default η value
+        qeta = self.terminal_inventory_penalty  # Default η value
         if raw_state["internal_data"]["current_time"] >= raw_state['internal_data']['mkt_open'] + self.execution_window:
-            tip_t = eta * (holdings ** 2)
+            tip_t = qeta * (holdings ** 3)
         else:
             tip_t = 0
 
@@ -647,9 +659,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 6) Fill Ratio (FR_t)
         #    FR_t = alpha * (FR - 0.5)
         #######################################################
-        inter_wakeup_executed_orders = set([x[-1] for x in raw_state["internal_data"]["parsed_inter_wakeup_executed_orders"]])
-        num_executed_orders = len(inter_wakeup_executed_orders)
-        fill_ratio = num_executed_orders / 2
+        total_volume = sum([x[0] for x in raw_state["internal_data"]["parsed_inter_wakeup_executed_orders"]])
+        fill_ratio = total_volume / (2 * self.order_fixed_size)
         alpha = self.fill_ratio_bonus
 
         # Normalize fill ratio contribution by considering relative weight
@@ -659,7 +670,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 5) Combine for final reward
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
-        reward = (dp_t + tp_t - ip_t - tip_t + fr_t) / (self.parent_order_size * 10)
+        reward = (
+                         dp_t +
+                         tp_t -
+                         ip_t +
+                         tip_t +
+                         fr_t
+                 ) / (self.parent_order_size * 10)
 
         #######################################################
         # Add any other terms you want:
@@ -670,6 +687,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.custom_metrics_tracker.dp_t = dp_t
         self.custom_metrics_tracker.tp_t = tp_t
         self.custom_metrics_tracker.ip_t = ip_t
+        self.custom_metrics_tracker.fr_t = fr_t
+        self.custom_metrics_tracker.tip_t = tip_t
         self.custom_metrics_tracker.reward = reward
 
         return reward
@@ -722,6 +741,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
 
+        # For now, simply turn it off to see what happens since the conditions are quite harsh
+        update_reward = 0
+
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
 
@@ -755,9 +777,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         time_limit = mkt_open + self.first_interval + self.execution_window
 
         # 5) conditions
-        if (self.direction == "BUY") and (holdings >= parent_order_size):
+        if holdings >= parent_order_size:
             done = True  # Buy parent order executed
-        elif (self.direction == "SELL") and (holdings <= -parent_order_size):
+        elif holdings <= -parent_order_size:
             done = True  # Sell parent order executed
         elif current_time >= time_limit:
             done = True  # Mkt Close
@@ -819,7 +841,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "last_transaction": last_transaction,
                 "best_bid": best_bid,
                 "best_ask": best_ask,
-                "cash": cash,
+                "cash_pct": cash / self.starting_cash,
                 "volume_bid": volume_bid,
                 "volume_ask": volume_ask,
                 "total_volume": total_volume,
@@ -827,7 +849,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "current_time": current_time,
                 "holdings": holdings,
                 "parent_size": self.parent_order_size,
-                "mtm": self.previous_marked_to_market,
+                "mtm_pnl": self.previous_marked_to_market - self.starting_cash,
+                "tp_t": self.custom_metrics_tracker.tp_t,
+                "dp_t": self.custom_metrics_tracker.dp_t,
+                "ip_t": self.custom_metrics_tracker.ip_t,
+                "fr_t": self.custom_metrics_tracker.fr_t,
                 "reward": reward,
             }
         else:
