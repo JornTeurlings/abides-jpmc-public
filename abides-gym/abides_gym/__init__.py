@@ -17,7 +17,7 @@ register(
 )
 
 register(
-    id="markets-execution-thesis-v0",
+    id="markets-execution-thesis",
     entry_point=SubGymMarketsExecutionEnvThesis_v0
 )
 
