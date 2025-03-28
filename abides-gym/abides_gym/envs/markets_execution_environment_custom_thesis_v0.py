@@ -108,6 +108,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             market_data_buffer_length: int = 5,
             first_interval: str = "00:00:30",
             parent_order_size: int = 200,
+            scale_price: int = 100000,
             execution_window: str = "00:10:00",
             direction: str = "BUY",
             not_enough_reward_update: int = -100,
@@ -123,6 +124,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.mkt_close: NanosecondTime = str_to_ns(mkt_close)
         self.timestep_duration: NanosecondTime = str_to_ns(timestep_duration)
         self.starting_cash: int = starting_cash
+        self.scale_price: int = scale_price
         self.order_fixed_size: int = order_fixed_size
         self.state_history_length: int = state_history_length
         self.market_data_buffer_length: int = market_data_buffer_length
@@ -263,12 +265,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         assert (self.ofi_lag < self.state_history_length), 'OFI Lag must be smaller than data to calculate it'
 
         # Update state feature count to reflect the new state variables
-        self.num_state_features: int = 10 + self.state_history_length - 1 + self.ofi_lag + self.mlofi_depth  # 9 fixed features + OFI + returns + MLOFI levels
+        self.num_state_features: int = 11 + self.state_history_length - 1 + self.ofi_lag + self.mlofi_depth  # 9 fixed features + OFI + returns + MLOFI levels
 
         # Define upper bounds for state values
         self.state_highs: np.ndarray = np.array(
             [
                 np.finfo(np.float32).max,  # holdings_pct
+                np.finfo(np.float32).max,  # scaled_mid_price
                 np.finfo(np.float32).max,  # time_pct
                 np.finfo(np.float32).max,  # diff_pct
                 np.finfo(np.float32).max,  # imbalance_all
@@ -289,6 +292,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.state_lows: np.ndarray = np.array(
             [
                 np.finfo(np.float32).min,  # holdings_pct
+                np.finfo(np.float32).min,  # scaled_mid_price
                 np.finfo(np.float32).min,  # time_pct
                 np.finfo(np.float32).min,  # diff_pct
                 np.finfo(np.float32).min,  # imbalance_all
@@ -325,8 +329,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_asks: list | None = None
         self.previous_bids: list | None = None
         self.previous_depth: int = 0
-        self.reservation_quote = tuning_params.get('reservation_quote', 0.05)
-        self.max_spread = tuning_params.get('max_spread', 0.2)
+        self.reservation_quote = tuning_params.get('reservation_quote', 0.01)
+        self.max_spread = tuning_params.get('max_spread', 0.005)
 
     def _map_action_space_to_ABIDES_SIMULATOR_SPACE(self, action: list):
         """
@@ -335,37 +339,40 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         We'll round the size floats to integers for the order instructions.
         """
+        # action[0], action[1] in [0, 1] from your network
+        raw_spread, raw_reservation = action[:2]
 
-        spread_per, reservation_price_perc = action
+        # Map [0,1] -> [-1,1]
+        spread_val = raw_spread
+        resv_val = raw_reservation
 
-        # 1) Retrieve a reference price (e.g., mid_price) from your environment state
-        mid_price = self.last_mid_price
+        mid_price = self.last_mid_price  # ~100,000
 
-        # 2) Compute absolute prices from offsets
-        #    e.g., if offset is negative, quote inside; if positive, quote wide
+        # Reservation Price
         reservation_price = mid_price - (1 if self.custom_metrics_tracker.holdings_pct >= 0 else -1) * \
-                            self.reservation_quote * mid_price * reservation_price_perc
+                            self.reservation_quote * mid_price * resv_val
 
-        bid_price = round(reservation_price - spread_per * mid_price * self.max_spread / 2)
-        ask_price = round(reservation_price + spread_per * mid_price * self.max_spread / 2)
+        # Spread (split in half around the reservation_price)
+        half_spread = (spread_val * self.max_spread * mid_price) / 2.0
 
-        # 5) Construct ABIDES instructions
+        bid_price = round(reservation_price - half_spread)
+        ask_price = round(reservation_price + half_spread)
+
+        # Build instructions
         instructions = [{"type": "CCL_ALL"}]
-
-        # For usage inside the metrics
         instructions.append({
             "type": "LMT",
             "direction": "BUY",
             "size": self.order_fixed_size,
             "limit_price": bid_price
         })
-
         instructions.append({
             "type": "LMT",
             "direction": "SELL",
             "size": self.order_fixed_size,
             "limit_price": ask_price
         })
+
         self.orders_submitted += 2
         return instructions
 
@@ -384,6 +391,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         bids = raw_state["parsed_mkt_data"]["bids"]
         asks = raw_state["parsed_mkt_data"]["asks"]
         last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
+
+        bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1]
+        ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1]
 
         # 1) Holdings
         holdings = raw_state["internal_data"]["holdings"]
@@ -450,10 +460,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             for (asks, mid) in zip(asks, mid_prices)
         ]
 
-        spreads = np.array(best_asks) - np.array(best_bids)
-        spread = spreads[-1]
-
         self.last_mid_price = (np.array(best_asks) + np.array(best_bids))[-1] / 2
+        scaled_mid_price = self.last_mid_price / self.scale_price
+
+        spreads = np.array(best_asks) - np.array(best_bids)
+        spread = spreads[-1] / self.last_mid_price
 
         # 7) mid_price
         mid_prices = [
@@ -472,10 +483,14 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # Total Liq
         top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1)
         top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1)
-        top_of_book_liquidity = top_bid_volume + top_ask_volume
+        if bid_volume + ask_volume > 0:
+            top_of_book_liquidity = (top_bid_volume + top_ask_volume) / (bid_volume + ask_volume)
+        else:
+            top_of_book_liquidity = 0
 
         # 8) depth
-        depth = min(len(best_asks), len(best_bids))
+        max_depth = 10
+        depth = min(len(best_asks), len(best_bids)) / max_depth
 
         # 9) MLOFI
         if (self.previous_bids is None and self.previous_asks is None
@@ -538,6 +553,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         computed_state = np.array(
             [
                 holdings_pct,
+                scaled_mid_price,
                 time_pct,
                 diff_pct,
                 imbalance_all,
@@ -682,12 +698,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
         reward = (
-                         dp_t +
-                         tp_t -
-                         ip_t +
-                         tip_t +
-                         fr_t
-                 ) / (self.parent_order_size * 10)
+                dp_t +
+                tp_t -
+                ip_t +
+                tip_t
+        ) / self.scale_price
 
         #######################################################
         # Add any other terms you want:
@@ -741,6 +756,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
+        # update_reward = 0
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
