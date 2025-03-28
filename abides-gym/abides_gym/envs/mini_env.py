@@ -16,7 +16,7 @@ from .markets_environment import AbidesGymMarketsEnv
 from abides_markets.orders import LimitOrder
 
 
-class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
+class SubGymMarketsExecutionEnvMini(AbidesGymMarketsEnv):
     """
     Execution V0 environnement. It defines one of the ABIDES-Gym-markets environnement.
     This environment presents an example of the algorithmic orderexecution problem.
@@ -99,7 +99,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
     def __init__(
             self,
-            background_config: Any = "rmsc04",
+            background_config: Any = "test",
             mkt_close: str = "16:00:00",
             timestep_duration: str = "60s",
             starting_cash: int = 10_000_000,
@@ -111,7 +111,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             execution_window: str = "00:10:00",
             direction: str = "BUY",
             not_enough_reward_update: int = -100,
-            too_much_reward_update: int = -100,
+            too_much_reward_update: int = -1000,
             just_quantity_reward_update: int = 0,
             debug_mode: bool = False,
             tuning_params: Dict[str, any] = {},
@@ -671,11 +671,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
         reward = (
-                         dp_t +
-                         tp_t -
-                         ip_t +
-                         tip_t +
-                         fr_t
+                         dp_t
+                         # tp_t -
+                         # ip_t +
+                         # tip_t +
+                         # fr_t
                  ) / (self.parent_order_size * 10)
 
         #######################################################

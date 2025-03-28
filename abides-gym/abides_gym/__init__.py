@@ -26,6 +26,11 @@ register(
     entry_point=SubGymMarketsExecutionEnvThesisDiscrete
 )
 
+register(
+    id="markets-execution-mini-env",
+    entry_point=SubGymMarketsExecutionEnvMini
+)
+
 
 # REGISTER ENVS FOR RAY/RLLIB USE
 
