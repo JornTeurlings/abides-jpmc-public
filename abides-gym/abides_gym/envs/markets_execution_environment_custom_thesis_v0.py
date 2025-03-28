@@ -103,15 +103,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             mkt_close: str = "16:00:00",
             timestep_duration: str = "60s",
             starting_cash: int = 10_000_000,
-            order_fixed_size: int = 30,
+            order_fixed_size: int = 20,
             state_history_length: int = 10,
             market_data_buffer_length: int = 5,
             first_interval: str = "00:00:30",
-            parent_order_size: int = 300,
+            parent_order_size: int = 200,
             execution_window: str = "00:10:00",
             direction: str = "BUY",
             not_enough_reward_update: int = -100,
-            too_much_reward_update: int = -100,
+            too_much_reward_update: int = -80,
             just_quantity_reward_update: int = 0,
             debug_mode: bool = False,
             tuning_params: Dict[str, any] = {},
@@ -151,7 +151,14 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "rmsc03",
             "rmsc04",
             "smc_01",
-        ], "Select rmsc03 or rmsc04 as config"
+            "test",
+            "momentum",
+            "high_liq",
+            "high_vol_shock",
+            "low_info",
+            "exec_pressure",
+            "low_liq"
+        ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
                 self.first_interval >= str_to_ns("00:00:00")
@@ -309,6 +316,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # Penalty for the inventory
         self.fill_ratio_bonus: float = tuning_params.get("fill_ratio_bonus", 100)
+        self.tpt_weight: float = tuning_params.get('tpt_weight', 0.001)
+        self.dpt_eta: float = tuning_params.get('dpt_eta', 0.2)
+        self.dpt_weight: float = tuning_params.get('dpt_weight', 0.02)
         self.inventory_penalty: float = tuning_params.get("inventory_penalty", 1)
         self.terminal_inventory_penalty: float = tuning_params.get("terminal_inventory_penalty", 1)
         self.orders_submitted: int = 0
@@ -333,7 +343,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 2) Compute absolute prices from offsets
         #    e.g., if offset is negative, quote inside; if positive, quote wide
-        reservation_price = mid_price -  self.reservation_quote * mid_price * reservation_price_perc
+        reservation_price = mid_price - (1 if self.custom_metrics_tracker.holdings_pct >= 0 else -1) * \
+                            self.reservation_quote * mid_price * reservation_price_perc
 
         bid_price = round(reservation_price - spread_per * mid_price * self.max_spread / 2)
         ask_price = round(reservation_price + spread_per * mid_price * self.max_spread / 2)
@@ -616,13 +627,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         delta_pnl_t = value_t - self.previous_marked_to_market
 
         # Dampened PnL
-        eta = 0.2
+        eta = self.dpt_eta
         if delta_pnl_t > 0:
             dp_t = delta_pnl_t * (1.0 - eta)
         else:
             dp_t = delta_pnl_t
 
-        qta = 0.5
+        qta = self.dpt_weight
         # Reward scaling is necessay
         dp_t *= qta
 
@@ -635,7 +646,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         #    fill_qty * (mid_price - fill_price_for_BUY)
         #    or handle sign if SELL.
         #######################################################
-        beta = 0.20
+        beta = self.tpt_weight
         tp_t = beta * self.compute_tpt(raw_state, mid_price)
 
         #######################################################
@@ -724,7 +735,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         elif (holdings <= -parent_order_size):
             update_reward = (
                     abs(holdings - parent_order_size) * self.too_much_reward_update
-            )  # executed sell too much # executed sell not enough
+            )  # executed sell too much
         else:
             update_reward = self.just_quantity_reward_update
 

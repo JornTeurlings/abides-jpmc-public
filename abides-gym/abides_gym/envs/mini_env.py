@@ -103,15 +103,15 @@ class SubGymMarketsExecutionEnvMini(AbidesGymMarketsEnv):
             mkt_close: str = "16:00:00",
             timestep_duration: str = "60s",
             starting_cash: int = 10_000_000,
-            order_fixed_size: int = 30,
+            order_fixed_size: int = 15,
             state_history_length: int = 10,
             market_data_buffer_length: int = 5,
             first_interval: str = "00:00:30",
             parent_order_size: int = 300,
             execution_window: str = "00:10:00",
             direction: str = "BUY",
-            not_enough_reward_update: int = -100,
-            too_much_reward_update: int = -1000,
+            not_enough_reward_update: int = -10,
+            too_much_reward_update: int = -10,
             just_quantity_reward_update: int = 0,
             debug_mode: bool = False,
             tuning_params: Dict[str, any] = {},
@@ -151,7 +151,14 @@ class SubGymMarketsExecutionEnvMini(AbidesGymMarketsEnv):
             "rmsc03",
             "rmsc04",
             "smc_01",
-        ], "Select rmsc03 or rmsc04 as config"
+            "test",
+            "momentum",
+            "high_liq",
+            "high_vol_shock",
+            "low_info",
+            "exec_pressure",
+            "low_liq"
+        ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
                 self.first_interval >= str_to_ns("00:00:00")
