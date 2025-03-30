@@ -330,7 +330,30 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_bids: list | None = None
         self.previous_depth: int = 0
         self.reservation_quote = tuning_params.get('reservation_quote', 0.01)
-        self.max_spread = tuning_params.get('max_spread', 0.005)
+        self.max_spread = tuning_params.get('max_spread', 0.001)
+
+    def compute_bid_ask(self, spread_val, res_val, extra_info = False) -> tuple[int, int, float | None]:
+        """
+        Function for calculating the bid-ask spread based on the input
+        Args:
+            spread_val: x in (0, 1) to indicate how wide the spread will be
+            res_val: y in (0, 1) to indicate how far off the mid-price we will quote our mid-price
+
+        Returns: The bid-price and ask-price that will be quoted
+
+        """
+        mid_price = self.last_mid_price  # ~100,000
+
+        # Reservation Price
+        reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
+
+        # Spread (split in half around the reservation_price)
+        half_spread = (spread_val * self.max_spread * mid_price) / 2.0
+
+        bid_price = round(reservation_price - half_spread)
+        ask_price = round(reservation_price + half_spread)
+
+        return bid_price, ask_price, reservation_price if extra_info else None
 
     def _map_action_space_to_ABIDES_SIMULATOR_SPACE(self, action: list):
         """
@@ -339,24 +362,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         We'll round the size floats to integers for the order instructions.
         """
-        # action[0], action[1] in [0, 1] from your network
+
         raw_spread, raw_reservation = action[:2]
 
-        # Map [0,1] -> [-1,1]
-        spread_val = raw_spread
-        resv_val = raw_reservation
+        self.last_raw_spread = raw_spread
+        self.last_raw_reservation = raw_reservation
 
-        mid_price = self.last_mid_price  # ~100,000
-
-        # Reservation Price
-        reservation_price = mid_price - (1 if self.custom_metrics_tracker.holdings_pct >= 0 else -1) * \
-                            self.reservation_quote * mid_price * resv_val
-
-        # Spread (split in half around the reservation_price)
-        half_spread = (spread_val * self.max_spread * mid_price) / 2.0
-
-        bid_price = round(reservation_price - half_spread)
-        ask_price = round(reservation_price + half_spread)
+        bid_price, ask_price, _ = self.compute_bid_ask(raw_spread, raw_reservation)
 
         # Build instructions
         instructions = [{"type": "CCL_ALL"}]
@@ -697,12 +709,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 5) Combine for final reward
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
-        reward = (
-                dp_t +
-                tp_t -
-                ip_t +
-                tip_t
-        ) / self.scale_price
+        reward = (dp_t + tp_t - ip_t + tip_t + fr_t) / (self.scale_price)
 
         #######################################################
         # Add any other terms you want:
@@ -756,7 +763,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
-        # update_reward = 0
+        update_reward = 0
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
@@ -850,6 +857,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         reward = self.custom_metrics_tracker.reward
 
+        bid_price, ask_price, reserv = self.compute_bid_ask(self.last_raw_spread, self.last_raw_reservation, extra_info=True)
+        spread_width = ask_price - bid_price
+
         if self.debug_mode:
             return {
                 "last_transaction": last_transaction,
@@ -869,6 +879,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "ip_t": self.custom_metrics_tracker.ip_t,
                 "fr_t": self.custom_metrics_tracker.fr_t,
                 "reward": reward,
+                "spread_ac": self.last_raw_spread,
+                "reservation_ac": self.last_raw_reservation,
+                "reserv_price": abs(reserv - (best_bid + best_ask) / 2),
+                "spread_width": spread_width
             }
         else:
             return asdict(self.custom_metrics_tracker)
