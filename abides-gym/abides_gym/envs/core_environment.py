@@ -47,7 +47,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.terminated: Optional[bool] = None
         self.info: Optional[Dict[str, Any]] = None
 
-    def reset(self):
+    def reset(self, seed = None):
         """
         Reset the state of the environment and returns an initial observation.
 
@@ -57,7 +57,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         """
 
         # get seed to initialize random states for ABIDES
-        seed = self.np_random.integers(low=0, high=2 ** 32, dtype="uint64")
+        seed = self.np_random.integers(low=0, high=2 ** 32, dtype="uint64") if not seed else seed
         # instanciate back ground config state
         background_config_args = self.background_config_pair[1]
         background_config_args.update(
@@ -98,9 +98,10 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         # kernel will run until GymAgent has to take an action
         raw_state = kernel.runner()
         state = self.raw_state_to_state(deepcopy(raw_state["result"]))
+        info = self.raw_state_to_info(deepcopy(raw_state["result"]))
         # attach kernel
         self.kernel = kernel
-        return state
+        return state, info
 
     def step(self, action) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """

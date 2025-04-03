@@ -332,6 +332,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.reservation_quote = tuning_params.get('reservation_quote', 0.01)
         self.max_spread = tuning_params.get('max_spread', 0.001)
 
+
+        # Some default values for initialization
+        self.last_raw_spread = 0
+        self.last_raw_reservation = 0
+
     def compute_bid_ask(self, spread_val, res_val, extra_info = False) -> tuple[int, int, float | None]:
         """
         Function for calculating the bid-ask spread based on the input
@@ -709,7 +714,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 5) Combine for final reward
         #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
         #######################################################
-        reward = (dp_t + tp_t - ip_t + tip_t + fr_t) / (self.scale_price)
+        reward = (dp_t + tp_t - ip_t + tip_t + fr_t) / self.parent_order_size
 
         #######################################################
         # Add any other terms you want:
@@ -763,7 +768,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
-        update_reward = 0
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
