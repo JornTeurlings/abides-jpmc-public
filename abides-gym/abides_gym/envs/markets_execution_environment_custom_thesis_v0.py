@@ -273,7 +273,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 10,  # holdings_pct
                 10,  # scaled_mid_price
                 1,  # time_pct
-                100,  # diff_pct
+                10,  # diff_pct
                 1,  # imbalance_all
                 1,  # spread
                 1,  # short_term_vol
@@ -502,7 +502,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1)
         total_lot_volume = bid_volume + ask_volume
         if total_lot_volume > 0:
-            top_of_book_liquidity = (top_bid_volume + top_ask_volume) / total_lot_volume
+            top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume, 1)
         else:
             top_of_book_liquidity = 0.0
 
