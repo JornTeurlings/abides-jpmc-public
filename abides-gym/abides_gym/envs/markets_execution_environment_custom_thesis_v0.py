@@ -241,7 +241,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.multiple_action_heads = True
         self.num_actions: int = 2
         self.action_space = gym.spaces.Box(
-            low=np.array([0, 0], dtype=np.float32),
+            low=np.array([-1, -1], dtype=np.float32),
             high=np.array([1, 1], dtype=np.float32),
             shape=(self.num_actions,),
             dtype=np.float32
@@ -265,25 +265,23 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         assert (self.ofi_lag < self.state_history_length), 'OFI Lag must be smaller than data to calculate it'
 
         # Update state feature count to reflect the new state variables
-        self.num_state_features: int = 11 + self.state_history_length - 1 + self.ofi_lag + self.mlofi_depth  # 9 fixed features + OFI + returns + MLOFI levels
+        self.num_state_features: int = 9 + self.state_history_length - 1 + self.ofi_lag + self.mlofi_depth  # 9 fixed features + OFI + returns + MLOFI levels
 
         # Define upper bounds for state values
         self.state_highs: np.ndarray = np.array(
             [
-                np.finfo(np.float32).max,  # holdings_pct
-                np.finfo(np.float32).max,  # scaled_mid_price
-                np.finfo(np.float32).max,  # time_pct
-                np.finfo(np.float32).max,  # diff_pct
-                np.finfo(np.float32).max,  # imbalance_all
-                np.finfo(np.float32).max,  # price_impact
-                np.finfo(np.float32).max,  # spread
-                np.finfo(np.float32).max,  # short_term_vol
-                np.finfo(np.float32).max,  # top_of_book_liquidity
-                np.finfo(np.float32).max,  # TP_t
+                10,  # holdings_pct
+                10,  # scaled_mid_price
+                1,  # time_pct
+                100,  # diff_pct
+                1,  # imbalance_all
+                1,  # spread
+                1,  # short_term_vol
+                1,  # top_of_book_liquidity
                 10,  # depth (set an upper bound for depth)
             ]
-            + [np.finfo(np.float32).max] * self.mlofi_depth  # Dynamic MLOFI levels
-            + self.ofi_lag * [np.finfo(np.float32).max]  # Lagged time OFI
+            + [1] * self.mlofi_depth  # Dynamic MLOFI levels
+            + self.ofi_lag * [1]  # Lagged time OFI
             + (self.state_history_length - 1) * [np.finfo(np.float32).max],  # Returns
             dtype=np.float32,
         ).reshape(self.num_state_features, 1)
@@ -291,20 +289,18 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # Define lower bounds for state values
         self.state_lows: np.ndarray = np.array(
             [
-                np.finfo(np.float32).min,  # holdings_pct
-                np.finfo(np.float32).min,  # scaled_mid_price
-                np.finfo(np.float32).min,  # time_pct
-                np.finfo(np.float32).min,  # diff_pct
-                np.finfo(np.float32).min,  # imbalance_all
-                np.finfo(np.float32).min,  # price_impact
-                np.finfo(np.float32).min,  # spread
-                np.finfo(np.float32).min,  # short_term_vol
-                np.finfo(np.float32).min,  # top_of_book_liquidity
-                np.finfo(np.float32).min,  # TP_t
+                -10,  # holdings_pct
+                0,  # scaled_mid_price
+                0,  # time_pct
+                -10,  # diff_pct
+                -1,  # imbalance_all
+                0,  # spread
+                0,  # short_term_vol
+                0,  # top_of_book_liquidity
                 0,  # depth (depth cannot be negative)
             ]
-            + [np.finfo(np.float32).min] * self.mlofi_depth  # Dynamic MLOFI levels
-            + self.ofi_lag * [np.finfo(np.float32).min]  # Lagged time OFI
+            + [-1] * self.mlofi_depth  # Dynamic MLOFI levels
+            + self.ofi_lag * [-1]  # Lagged time OFI
             + (self.state_history_length - 1) * [np.finfo(np.float32).min],  # Returns
             dtype=np.float32,
         ).reshape(self.num_state_features, 1)
@@ -463,19 +459,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         ]
         mid_price = mid_prices[-1]  # current mid
 
-        if self.step_index == 0:
-            self.entry_price = mid_price
-
-        entry_price = self.entry_price
-
-        # For a BUY order, price impact = log(mid / entry)
-        # For a SELL order, price impact = log(entry / mid)
-        price_impact = (
-            np.log(mid_price / entry_price)
-            if self.direction == "BUY"
-            else np.log(entry_price / mid_price)
-        )
-
         # 6) Best bids / asks
         best_bids = [
             b[0][0] if len(b) > 0 else mp
@@ -573,11 +556,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                                       time_pct,
                                       diff_pct,
                                       imbalance_all,
-                                      price_impact,
                                       spread,
                                       short_term_vol,
                                       top_of_book_liquidity,
-                                      self.custom_metrics_tracker.tp_t,  # Typically 0 except right after fills
                                       depth
                                   ] + ml_ofi.tolist()
                                   + padded_ofi.tolist()
