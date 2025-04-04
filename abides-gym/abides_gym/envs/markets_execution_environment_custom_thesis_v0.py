@@ -331,13 +331,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_depth: int = 0
         self.reservation_quote = tuning_params.get('reservation_quote', 0.01)
         self.max_spread = tuning_params.get('max_spread', 0.001)
-
+        self.direct_action = tuning_params.get('direction_action', False)
 
         # Some default values for initialization
-        self.last_raw_spread = 0
-        self.last_raw_reservation = 0
+        self.last_action_1 = 0
+        self.last_action_2 = 0
 
-    def compute_bid_ask(self, spread_val, res_val, extra_info = False) -> tuple[int, int, float | None]:
+    def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
         """
         Function for calculating the bid-ask spread based on the input
         Args:
@@ -360,6 +360,23 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         return bid_price, ask_price, reservation_price if extra_info else None
 
+    def compute_bid_ask_direct(self, bid_val, ask_val) -> tuple[int, int, float | None]:
+        """
+        Function for calculating the bid-ask spread based on the input
+        Args:
+            bid_val: x in (0, 1) to indicate how much extra from the mid_price bid will be
+            ask_val: y in (0, 1) to indicate how much extra from the mid_price ask will be
+
+        Returns: The bid-price and ask-price that will be quoted
+
+        """
+        mid_price = self.last_mid_price  # ~100,000
+
+        bid_price = round(mid_price * (1 - bid_val))
+        ask_price = round(mid_price * (1 + ask_val))
+
+        return bid_price, ask_price, None
+
     def _map_action_space_to_ABIDES_SIMULATOR_SPACE(self, action: list):
         """
         action is a 4D float array:
@@ -368,12 +385,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         We'll round the size floats to integers for the order instructions.
         """
 
-        raw_spread, raw_reservation = action[:2]
+        action_1, action_2 = action[:2]
 
-        self.last_raw_spread = raw_spread
-        self.last_raw_reservation = raw_reservation
+        self.last_action_1 = action_1
+        self.last_action_2 = action_2
 
-        bid_price, ask_price, _ = self.compute_bid_ask(raw_spread, raw_reservation)
+        if self.direct_action:
+            bid_price, ask_price, _ = self.compute_bid_ask_direct(action_1, action_2)
+        else:
+            bid_price, ask_price, _ = self.compute_bid_ask_reservation(action_1, action_2)
 
         # Build instructions
         instructions = [{"type": "CCL_ALL"}]
@@ -396,15 +416,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
     @raw_state_to_state_pre_process
     def raw_state_to_state(self, raw_state: Dict[str, Any]) -> np.ndarray:
         """
-        method that transforms a raw state into a state representation
-
-        Arguments:
-            - raw_state: dictionary that contains raw simulation information obtained from the gym experimental agent
+        Method that transforms a raw state into a dimensionless,
+        well-scaled state representation for both PPO and SAC.
 
         Returns:
-            - state: state representation defining the MDP for the execution v0 environment
+            state (np.ndarray): shape (self.num_state_features, 1)
         """
+        # ---------------------------
         # 0) Preliminary
+        # ---------------------------
         bids = raw_state["parsed_mkt_data"]["bids"]
         asks = raw_state["parsed_mkt_data"]["asks"]
         last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
@@ -412,182 +432,160 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1]
         ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1]
 
-        # 1) Holdings
+        # 1) Holdings (scaled)
         holdings = raw_state["internal_data"]["holdings"]
-        holdings_pct = holdings[-1] / self.parent_order_size
+        holdings_pct = holdings[-1] / self.parent_order_size  # dimensionless in [-1,1]
 
         # 2) Timing
-        # 2)a) mkt_open
         mkt_open = raw_state["internal_data"]["mkt_open"][-1]
-        # 2)b) time from beginning of execution (parent arrival)
         current_time = raw_state["internal_data"]["current_time"][-1]
         time_from_parent_arrival = current_time - mkt_open - self.first_interval
-        assert (
-                current_time >= mkt_open + self.first_interval
-        ), "Agent has woken up earlier than its first interval"
-        # 2)c) time limit
+        assert (current_time >= mkt_open + self.first_interval), (
+            "Agent has woken up earlier than its first interval"
+        )
         time_limit = self.execution_window
-        # 2)d) compute percentage time advancement
-        time_pct = time_from_parent_arrival / time_limit
+        time_pct = time_from_parent_arrival / time_limit  # dimensionless in [0,1]
 
-        # 3) Advancement Comparison
-        diff_pct = holdings_pct - time_pct
+        # 3) Compare progress vs holdings
+        diff_pct = holdings_pct - time_pct  # in [-1, 1]
 
-        # 3) Queue Imbalance
+        # 4) Order book imbalance
         imbalances_all = [
             markets_agent_utils.get_imbalance(b, a, depth=None)
             for (b, a) in zip(bids, asks)
         ]
-        imbalance_all = imbalances_all[-1]
+        imbalance_all = imbalances_all[-1]  # typically in [-1,1]
 
-        # 4) price_impact
+        # 5) Mid Prices + Price Impact
         mid_prices = [
-            markets_agent_utils.get_mid_price(b, a, lt)
-            for (b, a, lt) in zip(bids, asks, last_transactions)
+            markets_agent_utils.get_mid_price(bid, ask, lt)
+            for (bid, ask, lt) in zip(bids, asks, last_transactions)
         ]
-        mid_price = mid_prices[-1]
+        mid_price = mid_prices[-1]  # current mid
 
-        if self.step_index == 0:  # 0 order has been executed yet
+        if self.step_index == 0:
             self.entry_price = mid_price
 
         entry_price = self.entry_price
 
-        book = (
-            raw_state["parsed_mkt_data"]["bids"][-1]
-            if self.direction == "BUY"
-            else raw_state["parsed_mkt_data"]["asks"][-1]
-        )
-
-        self.near_touch = book[0][0] if len(book) > 0 else last_transactions[-1]
-
-        # Compute the price impact
+        # For a BUY order, price impact = log(mid / entry)
+        # For a SELL order, price impact = log(entry / mid)
         price_impact = (
             np.log(mid_price / entry_price)
             if self.direction == "BUY"
             else np.log(entry_price / mid_price)
         )
 
-        # 5) Spread
+        # 6) Best bids / asks
         best_bids = [
-            bids[0][0] if len(bids) > 0 else mid
-            for (bids, mid) in zip(bids, mid_prices)
+            b[0][0] if len(b) > 0 else mp
+            for (b, mp) in zip(bids, mid_prices)
         ]
         best_asks = [
-            asks[0][0] if len(asks) > 0 else mid
-            for (asks, mid) in zip(asks, mid_prices)
+            a[0][0] if len(a) > 0 else mp
+            for (a, mp) in zip(asks, mid_prices)
         ]
 
-        self.last_mid_price = (np.array(best_asks) + np.array(best_bids))[-1] / 2
-        scaled_mid_price = self.last_mid_price / self.scale_price
+        self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
+        # Scale mid_price to ~ 1 range if needed
+        scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around -1
 
+        # Spread as fraction of mid
         spreads = np.array(best_asks) - np.array(best_bids)
-        spread = spreads[-1] / self.last_mid_price
+        spread = spreads[-1] / self.last_mid_price  # dimensionless relative to mid_price < 1/2
 
-        # 7) mid_price
-        mid_prices = [
-            markets_agent_utils.get_mid_price(b, a, lt)
-            for (b, a, lt) in zip(bids, asks, last_transactions)
-        ]
-        returns = np.diff(mid_prices)
-        padded_returns = np.zeros(self.state_history_length - 1)
-        padded_returns[-len(returns):] = (
-            returns if len(returns) > 0 else padded_returns
-        )
+        # 7) Log returns
+        # Replace raw differences with log(m_i / m_(i-1))
+        log_prices = np.log(mid_prices)
+        log_returns = np.diff(log_prices)
 
-        # Short term vol
-        short_term_vol = np.std(returns[-10:]) if len(returns) >= 10 else 0.0
+        # Pad
+        padded_returns = np.zeros(self.state_history_length - 1, dtype=np.float32)
+        last_k = len(log_returns)
+        padded_returns[-last_k:] = log_returns if last_k > 0 else padded_returns
 
-        # Total Liq
+        # 8) Short term vol from log returns
+        # e.g. std of the last 10 log returns
+        if len(log_returns) >= 10:
+            short_term_vol = np.std(log_returns[-10:])
+        else:
+            short_term_vol = 0.0
+        # (Optional) Clip outliers if needed
+        clip_vol = 1
+        short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
+
+        # 9) Liquidity & Depth
         top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1)
         top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1)
-        if bid_volume + ask_volume > 0:
-            top_of_book_liquidity = (top_bid_volume + top_ask_volume) / (bid_volume + ask_volume)
+        total_lot_volume = bid_volume + ask_volume
+        if total_lot_volume > 0:
+            top_of_book_liquidity = (top_bid_volume + top_ask_volume) / total_lot_volume
         else:
-            top_of_book_liquidity = 0
+            top_of_book_liquidity = 0.0
 
-        # 8) depth
         max_depth = 10
-        depth = min(len(best_asks), len(best_bids)) / max_depth
+        depth = min(len(best_asks), len(best_bids)) / max_depth  # in [0,1]
 
-        # 9) MLOFI
-        if (self.previous_bids is None and self.previous_asks is None
-                or self.previous_bids is None
-                or self.previous_asks is None
-        ):
-            ml_ofi = [0] * self.mlofi_depth
+        # 10) MLOFI
+        if (self.previous_bids is None and self.previous_asks is None) \
+                or (self.previous_bids is None) or (self.previous_asks is None):
+            ml_ofi = [0.0] * self.mlofi_depth
         else:
-            # Compute the MLOFI up until a certain level
-            ml_ofi: list = markets_agent_utils.get_ml_ofi(
+            ml_ofi = markets_agent_utils.get_ml_ofi(
                 bids[0],
                 self.previous_bids,
                 asks[0],
                 self.previous_asks
             )[:self.mlofi_depth]
             if len(ml_ofi) < self.mlofi_depth:
-                ml_ofi = ml_ofi + [0] * (self.mlofi_depth - len(ml_ofi))
+                ml_ofi += [0.0] * (self.mlofi_depth - len(ml_ofi))
+        ml_ofi = np.clip(np.array(ml_ofi) / self.parent_order_size, a_min=-1, a_max=1)
 
-        # Multi time OFI
-        ofi_multi_time = [
-            markets_agent_utils.get_ml_ofi(
-                bids[-t],  # Current bids at t
-                bids[-(t + 1)],  # Next bids at t+1
-                asks[-t],  # Current asks at t
-                asks[-(t + 1)],  # Next asks at t+1
+        # 11) Multi time OFI
+        ofi_multi_time = []
+        for t in range(1, min(len(bids), len(asks), self.ofi_lag + 1)):
+            temp_ofi = markets_agent_utils.get_ml_ofi(
+                bids[-t], bids[-(t + 1)],
+                asks[-t], asks[-(t + 1)],
                 depth=1
             )
-            for t in range(1, min(len(bids), len(asks), self.ofi_lag + 1))
-        ]
-
-        for i in range(len(ofi_multi_time)):
-            if len(ofi_multi_time[i]) == 0:
-                ofi_multi_time[i] = 0
+            if len(temp_ofi) == 0:
+                ofi_multi_time.append(0.0)
             else:
-                ofi_multi_time[i] = ofi_multi_time[i][0]
+                ofi_multi_time.append(temp_ofi[0] / self.parent_order_size)
 
-        # Padding to ensure fixed-size state input
-        padded_ofi = np.zeros(self.ofi_lag)
-        padded_ofi[-len(ofi_multi_time):] = ofi_multi_time if len(ofi_multi_time) > 0 else padded_ofi
+        # Pad OFI
+        padded_ofi = np.zeros(self.ofi_lag, dtype=np.float32)
+        last_ofi_len = len(ofi_multi_time)
+        padded_ofi[-last_ofi_len:] = ofi_multi_time if last_ofi_len > 0 else padded_ofi
+        padded_ofi = np.clip(padded_ofi, -1, 1)  # now bounded to [-1, 1] (but might clip a lot)
 
-        # Set all previous values for computation of specific states
+        # Set references for next step
         self.previous_bids = bids[0]
         self.previous_asks = asks[0]
         self.previous_depth = depth
 
-        # log custom metrics to tracker
-        self.custom_metrics_tracker.holdings_pct = holdings_pct
-        self.custom_metrics_tracker.time_pct = time_pct
-        self.custom_metrics_tracker.diff_pct = diff_pct
-        self.custom_metrics_tracker.imbalance_all = imbalance_all
-        self.custom_metrics_tracker.short_term_vol = short_term_vol
-        self.custom_metrics_tracker.price_impact = price_impact
-        self.custom_metrics_tracker.spread = spread
-        self.custom_metrics_tracker.top_of_the_book_liquidity = top_of_book_liquidity
-        self.custom_metrics_tracker.depth = depth
-        self.custom_metrics_tracker.ml_ofi = ml_ofi
-        self.custom_metrics_tracker.ofi_time_lag = padded_ofi.tolist()
+        # 12) Build final state vector
+        # Keep your enumerated structure, but use dimensionless/log scaled features
+        computed_state = np.array([
+                                      holdings_pct,
+                                      scaled_mid_price,
+                                      time_pct,
+                                      diff_pct,
+                                      imbalance_all,
+                                      price_impact,
+                                      spread,
+                                      short_term_vol,
+                                      top_of_book_liquidity,
+                                      self.custom_metrics_tracker.tp_t,  # Typically 0 except right after fills
+                                      depth
+                                  ] + ml_ofi.tolist()
+                                  + padded_ofi.tolist()
+                                  + padded_returns.tolist(), dtype=np.float32)
 
-        # 8) Computed State
-        computed_state = np.array(
-            [
-                holdings_pct,
-                scaled_mid_price,
-                time_pct,
-                diff_pct,
-                imbalance_all,
-                price_impact,
-                spread,
-                short_term_vol,
-                top_of_book_liquidity,
-                self.custom_metrics_tracker.tp_t,
-                depth
-            ]
-            + ml_ofi
-            + padded_ofi.tolist()
-            + padded_returns.tolist(),
-            dtype=np.float32,
-        )
-        #
+        # Update step index
         self.step_index += 1
+
         return computed_state.reshape(self.num_state_features, 1)
 
     def compute_tpt(self, raw_state: Dict[str, Any], mid_price=None) -> float:
@@ -860,8 +858,12 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         cash = raw_state["internal_data"]["cash"]
 
         reward = self.custom_metrics_tracker.reward
-
-        bid_price, ask_price, reserv = self.compute_bid_ask(self.last_raw_spread, self.last_raw_reservation, extra_info=True)
+        reserv = None
+        if self.direct_action:
+            bid_price, ask_price, _ = self.compute_bid_ask_direct(self.last_action_1, self.last_action_2)
+        else:
+            bid_price, ask_price, reserv = self.compute_bid_ask_reservation(self.last_action_1, self.last_action_2,
+                                                                            extra_info=True)
         spread_width = ask_price - bid_price
 
         if self.debug_mode:
@@ -883,9 +885,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "ip_t": self.custom_metrics_tracker.ip_t,
                 "fr_t": self.custom_metrics_tracker.fr_t,
                 "reward": reward,
-                "spread_ac": self.last_raw_spread,
-                "reservation_ac": self.last_raw_reservation,
-                "reserv_price": abs(reserv - (best_bid + best_ask) / 2),
+                "spread_ac": self.last_action_1,
+                "reservation_ac": self.last_action_2,
+                "reserv_price": abs(reserv - (best_bid + best_ask) / 2) if reserv else self.last_mid_price,
                 "spread_width": spread_width
             }
         else:
