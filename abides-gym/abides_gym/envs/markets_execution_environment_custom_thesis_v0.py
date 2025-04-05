@@ -349,6 +349,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
 
         # Spread (split in half around the reservation_price)
+        spread_val = (spread_val + 1) / 2
         half_spread = (spread_val * self.max_spread * mid_price) / 2.0
 
         bid_price = round(reservation_price - half_spread)
