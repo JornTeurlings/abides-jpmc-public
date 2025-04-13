@@ -116,11 +116,17 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             just_quantity_reward_update: int = 0,
             debug_mode: bool = False,
             tuning_params: Dict[str, any] = {},
+            domain_randomization_envs: List[str] = [],
             background_config_extra_kvargs: Dict[str, Any] = {},
     ) -> None:
-        self.background_config: Any = importlib.import_module(
-            "abides_markets.configs.{}".format(background_config), package=None
-        )
+        if background_config == 'random':
+            self.background_config = [
+                importlib.import_module("abides_markets.configs.{}".format(config), package=None).build_config
+                for config in domain_randomization_envs]
+        else:
+            self.background_config: Any = importlib.import_module(
+                "abides_markets.configs.{}".format(background_config), package=None
+            ).build_config
         self.mkt_close: NanosecondTime = str_to_ns(mkt_close)
         self.timestep_duration: NanosecondTime = str_to_ns(timestep_duration)
         self.starting_cash: int = starting_cash
@@ -159,7 +165,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "high_vol_shock",
             "low_info",
             "exec_pressure",
-            "low_liq"
+            "low_liq",
+            "random"
         ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
@@ -223,7 +230,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         background_config_args.update(background_config_extra_kvargs)
         super().__init__(
             background_config_pair=(
-                self.background_config.build_config,
+                self.background_config,
                 background_config_args,
             ),
             wakeup_interval_generator=ConstantTimeGenerator(
@@ -232,7 +239,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             starting_cash=self.starting_cash,
             state_buffer_length=self.state_history_length,
             market_data_buffer_length=self.market_data_buffer_length,
-            first_interval=self.first_interval,
+            first_interval=self.first_interval
         )
 
         # Action Space
@@ -349,7 +356,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
 
         # Spread (split in half around the reservation_price)
-        spread_val = (spread_val + 1) / 2
+        spread_val = min(max((spread_val + 1) / 2, 0), 1)
         half_spread = (spread_val * self.max_spread * mid_price) / 2.0
 
         bid_price = round(reservation_price - half_spread)

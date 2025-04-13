@@ -2,6 +2,9 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
 from ..price_level import PriceLevel
 
+def log_print (str, *args):
+  #if not silent_mode: print (str.format(*args))
+    return
 
 ################## STATE MANIPULATION ###############################
 def list_dict_flip(ld: List[Dict[str, Any]]) -> Dict[str, List[Any]]:

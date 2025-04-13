@@ -35,7 +35,7 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
 
     def __init__(
         self,
-        background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
+        background_config_pair: Tuple[Callable | List[Callable], Optional[Dict[str, Any]]],
         wakeup_interval_generator: InterArrivalTimeGenerator,
         starting_cash: int,
         state_buffer_length: int,

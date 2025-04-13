@@ -19,15 +19,15 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
     def __init__(
             self,
-            background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
+            background_config_pair: Tuple[Callable | List[Callable], Optional[Dict[str, Any]]],
             wakeup_interval_generator: InterArrivalTimeGenerator,
             state_buffer_length: int,
             first_interval: Optional[NanosecondTime] = None,
-            gymAgentConstructor=None,
+            gymAgentConstructor=None
     ) -> None:
 
         self.background_config_pair: Tuple[
-            Callable, Optional[Dict[str, Any]]
+            Callable | List[Callable], Optional[Dict[str, Any]]
         ] = background_config_pair
         if background_config_pair[1] is None:
             background_config_pair[1] = {}
@@ -47,7 +47,11 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.terminated: Optional[bool] = None
         self.info: Optional[Dict[str, Any]] = None
 
-    def reset(self, seed = None):
+    def reset(self,
+              *,
+              seed: int | None = None,
+              options: dict[str, Any] | None = None,
+              ):
         """
         Reset the state of the environment and returns an initial observation.
 
@@ -63,9 +67,13 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         background_config_args.update(
             {"seed": seed, **self.extra_background_config_kvargs}
         )
-        background_config_state = self.background_config_pair[0](
-            **background_config_args
-        )
+        if isinstance(self.background_config_pair[0], List):
+            random_env = np.random.choice(self.background_config_pair[0])
+            background_config_state = random_env(**background_config_args)
+        else:
+            background_config_state = self.background_config_pair[0](
+                **background_config_args
+            )
         # instanciate gym agent and add it to config and gym object
         nextid = len(background_config_state["agents"])
         gym_agent = self.gymAgentConstructor(
