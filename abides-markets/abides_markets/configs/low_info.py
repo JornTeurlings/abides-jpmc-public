@@ -71,6 +71,8 @@ def build_config(
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
         num_momentum_agents=10,
+        # 6) Self Play Agents
+        n_self_play_agents=0
 ):
     """
     create the background configuration for rmsc04
@@ -286,4 +288,5 @@ def build_config(
         "custom_properties": {"oracle": oracle},
         "random_state_kernel": random_state_kernel,
         "stdout_log_level": stdout_log_level,
+        "n_self_play_agents": n_self_play_agents
     }

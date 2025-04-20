@@ -99,6 +99,13 @@ class Kernel:
             )
         )
 
+        self.self_play_agents: List[Agent] = list(
+            filter(
+                lambda agent: "SelfCoreBackgroundAgent" in [c.__name__ for c in agent.__class__.__bases__],
+                agents
+            )
+        )
+
         # Temporary check until ABIDES-gym supports multiple gym agents
         assert (
                 len(self.gym_agents) <= 1
@@ -283,7 +290,7 @@ class Kernel:
             agent_actions: A list of the different actions to be performed represented in a dictionary per action.
 
         Returns:
-          - it is a dictionnary composed of two elements:
+          - it is a dictionary composed of two elements:
             - "done": boolean True if the simulation is done, else False. It is true when simulation reaches end_time or when the message queue is empty.
             - "results": it is the raw_state returned by the gym experimental agent, contains data that will be formated in the gym environement to formulate state, reward, info etc.. If
                there is no gym experimental agent, then it is None.
@@ -292,6 +299,16 @@ class Kernel:
         if agent_actions is not None:
             exp_agent, action_list = agent_actions
             exp_agent.apply_actions(action_list)
+
+        for sp_agent in self.self_play_agents:
+            # Over here, we let the SelfPlayAgent use its raw_state to:
+            # 1. Get the raw_state
+            # 2. Transform it to a state used as in the environment
+            # 3. Forward this state through the NN
+            # 4. Get the actions out of the NN
+            # 5. Push these through a similar method as _map_ABIDES_to_gym
+            # 6. Messages should now be inside the message list
+            sp_agent.submit_actions()
 
         # Process messages until there aren't any (at which point there never can
         # be again, because agents only "wake" in response to messages), or until

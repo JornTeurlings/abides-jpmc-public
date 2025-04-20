@@ -118,6 +118,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             tuning_params: Dict[str, any] = {},
             domain_randomization_envs: List[str] = [],
             background_config_extra_kvargs: Dict[str, Any] = {},
+            saved_models_location: str | None = None
     ) -> None:
         if background_config == 'random':
             self.background_config = [
@@ -239,7 +240,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             starting_cash=self.starting_cash,
             state_buffer_length=self.state_history_length,
             market_data_buffer_length=self.market_data_buffer_length,
-            first_interval=self.first_interval
+            first_interval=self.first_interval,
+            saved_models_location=saved_models_location
         )
 
         # Action Space
@@ -339,6 +341,35 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # Some default values for initialization
         self.last_action_1 = 0
         self.last_action_2 = 0
+
+        environment_config = {
+            'parent_order_size': self.parent_order_size,
+            'execution_window': self.execution_window,
+            'scale_price': self.scale_price,
+            'state_history_length': self.state_history_length,
+            'mlofi_depth': self.mlofi_depth,
+            'ofi_lag': self.ofi_lag,
+            'num_state_features': self.num_state_features,
+            'reservation_quote': self.reservation_quote,
+            'max_spread': self.max_spread,
+            'direct_action': self.direct_action,
+            'order_fixed_size': self.order_fixed_size
+        }
+
+        # This is needed to make self-play work
+        self.set_environment_configuration(environment_config)
+
+        self.parent_order_size = self.environment_configuration['parent_order_size']
+        self.execution_window = str_to_ns(self.environment_configuration['execution_window'])
+        self.scale_price = self.environment_configuration['scale_price']
+        self.state_history_length = self.environment_configuration['state_history_length']
+        self.mlofi_depth = self.environment_configuration['mlofi_depth']
+        self.ofi_lag = self.environment_configuration['ofi_lag']
+        self.num_state_features = self.environment_configuration['num_state_features']
+        self.reservation_quote = self.environment_configuration['reservation_quote']
+        self.max_spread = self.environment_configuration['max_spread']
+        self.direct_action = self.environment_configuration.get('direct_action', False)
+        self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
 
     def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
         """
