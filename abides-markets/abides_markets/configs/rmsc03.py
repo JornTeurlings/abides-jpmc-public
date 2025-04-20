@@ -67,6 +67,7 @@ def build_config(
     val_kappa=1.67e-15,
     val_vol=1e-8,
     val_lambda_a=7e-11,
+    n_self_play_agents=0,
 ):
     fund_sigma_n = fund_r_bar / 10
     val_sigma_n = val_r_bar / 10
@@ -291,4 +292,5 @@ def build_config(
         "custom_properties": {"oracle": oracle},
         "random_state_kernel": random_state_kernel,
         "stdout_log_level": stdout_log_level,
+        "n_self_play_agents": n_self_play_agents
     }

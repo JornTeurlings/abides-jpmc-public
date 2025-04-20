@@ -116,11 +116,18 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             just_quantity_reward_update: int = 0,
             debug_mode: bool = False,
             tuning_params: Dict[str, any] = {},
+            domain_randomization_envs: List[str] = [],
             background_config_extra_kvargs: Dict[str, Any] = {},
+            saved_models_location: str | None = None
     ) -> None:
-        self.background_config: Any = importlib.import_module(
-            "abides_markets.configs.{}".format(background_config), package=None
-        )
+        if background_config == 'random':
+            self.background_config = [
+                importlib.import_module("abides_markets.configs.{}".format(config), package=None).build_config
+                for config in domain_randomization_envs]
+        else:
+            self.background_config: Any = importlib.import_module(
+                "abides_markets.configs.{}".format(background_config), package=None
+            ).build_config
         self.mkt_close: NanosecondTime = str_to_ns(mkt_close)
         self.timestep_duration: NanosecondTime = str_to_ns(timestep_duration)
         self.starting_cash: int = starting_cash
@@ -159,7 +166,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "high_vol_shock",
             "low_info",
             "exec_pressure",
-            "low_liq"
+            "low_liq",
+            "random"
         ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
@@ -223,7 +231,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         background_config_args.update(background_config_extra_kvargs)
         super().__init__(
             background_config_pair=(
-                self.background_config.build_config,
+                self.background_config,
                 background_config_args,
             ),
             wakeup_interval_generator=ConstantTimeGenerator(
@@ -233,6 +241,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             state_buffer_length=self.state_history_length,
             market_data_buffer_length=self.market_data_buffer_length,
             first_interval=self.first_interval,
+            saved_models_location=saved_models_location
         )
 
         # Action Space
@@ -333,6 +342,35 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.last_action_1 = 0
         self.last_action_2 = 0
 
+        environment_config = {
+            'parent_order_size': self.parent_order_size,
+            'execution_window': self.execution_window,
+            'scale_price': self.scale_price,
+            'state_history_length': self.state_history_length,
+            'mlofi_depth': self.mlofi_depth,
+            'ofi_lag': self.ofi_lag,
+            'num_state_features': self.num_state_features,
+            'reservation_quote': self.reservation_quote,
+            'max_spread': self.max_spread,
+            'direct_action': self.direct_action,
+            'order_fixed_size': self.order_fixed_size
+        }
+
+        # This is needed to make self-play work
+        self.set_environment_configuration(environment_config)
+
+        self.parent_order_size = self.environment_configuration['parent_order_size']
+        self.execution_window = str_to_ns(self.environment_configuration['execution_window'])
+        self.scale_price = self.environment_configuration['scale_price']
+        self.state_history_length = self.environment_configuration['state_history_length']
+        self.mlofi_depth = self.environment_configuration['mlofi_depth']
+        self.ofi_lag = self.environment_configuration['ofi_lag']
+        self.num_state_features = self.environment_configuration['num_state_features']
+        self.reservation_quote = self.environment_configuration['reservation_quote']
+        self.max_spread = self.environment_configuration['max_spread']
+        self.direct_action = self.environment_configuration.get('direct_action', False)
+        self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
+
     def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
         """
         Function for calculating the bid-ask spread based on the input
@@ -349,7 +387,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
 
         # Spread (split in half around the reservation_price)
-        spread_val = (spread_val + 1) / 2
+        spread_val = min(max((spread_val + 1) / 2, 0), 1)
         half_spread = (spread_val * self.max_spread * mid_price) / 2.0
 
         bid_price = round(reservation_price - half_spread)

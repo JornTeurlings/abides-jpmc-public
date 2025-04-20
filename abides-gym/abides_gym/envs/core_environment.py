@@ -5,11 +5,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import gymnasium as gym
 import numpy as np
 from gymnasium.utils import seeding
+import os
+import torch as th
+from stable_baselines3 import PPO
 
 from abides_core import Kernel, NanosecondTime
 from abides_core.generators import InterArrivalTimeGenerator
 from abides_core.utils import subdict
 from abides_markets.utils import config_add_agents
+from abides_gym.experimental_agents import SelfPlayAgent
 
 
 class AbidesGymCoreEnv(gym.Env, ABC):
@@ -19,15 +23,16 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
     def __init__(
             self,
-            background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
+            background_config_pair: Tuple[Callable | List[Callable], Optional[Dict[str, Any]]],
             wakeup_interval_generator: InterArrivalTimeGenerator,
             state_buffer_length: int,
             first_interval: Optional[NanosecondTime] = None,
             gymAgentConstructor=None,
+            saved_models_location=None
     ) -> None:
 
         self.background_config_pair: Tuple[
-            Callable, Optional[Dict[str, Any]]
+            Callable | List[Callable], Optional[Dict[str, Any]]
         ] = background_config_pair
         if background_config_pair[1] is None:
             background_config_pair[1] = {}
@@ -46,8 +51,18 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.truncated: Optional[bool] = None
         self.terminated: Optional[bool] = None
         self.info: Optional[Dict[str, Any]] = None
+        self.self_play_agents: List[SelfPlayAgent] = None
+        self.saved_models_location: str = saved_models_location
+        self.environment_configuration: Dict[str, Any] = {}
 
-    def reset(self, seed = None):
+    def set_environment_configuration(self, env_config: Dict[str, Any]):
+        self.environment_configuration = env_config
+
+    def reset(self,
+              *,
+              seed: int | None = None,
+              options: dict[str, Any] | None = None,
+              ):
         """
         Reset the state of the environment and returns an initial observation.
 
@@ -63,11 +78,48 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         background_config_args.update(
             {"seed": seed, **self.extra_background_config_kvargs}
         )
-        background_config_state = self.background_config_pair[0](
-            **background_config_args
-        )
-        # instanciate gym agent and add it to config and gym object
-        nextid = len(background_config_state["agents"])
+
+        if isinstance(self.background_config_pair[0], List):
+            random_env = np.random.choice(self.background_config_pair[0])
+            background_config_state = random_env(**background_config_args)
+        else:
+            background_config_state = self.background_config_pair[0](
+                **background_config_args
+            )
+
+        self_play_agents = []
+        agents = []
+        if background_config_args.get('n_self_play_agents', 0) > 0 and self.saved_models_location:
+            n = len(background_config_state["agents"])
+            for i in range(background_config_args['n_self_play_agents']):
+                # 1. Get the random network from the saved_models
+                #   - Where are we going to store this?
+                #   - Has to be accessible in a central spot and since it will not be trained here we need a common PWD
+                # Get the location of the models
+                models_dir = self.saved_models_location
+                # Get the models in the directory
+                options = os.listdir(models_dir)
+                # Choose any of the models
+                model_chosen = np.random.choice(options)
+
+                model = PPO.load(models_dir + '/' + model_chosen)
+                # 2. Make sure the correct configuration is given along
+                # 3. Make sure the model is unzipped and given as is to the network as a module
+                # 4. Continue executiing
+
+                new_sp_agent = SelfPlayAgent(
+                    n + i,
+                    "ABM",
+                    first_interval=self.first_interval,
+                    wakeup_interval_generator=self.wakeup_interval_generator,
+                    state_buffer_length=self.state_buffer_length,
+                    nn_model=model,
+                    environment_configuration=self.environment_configuration,
+                    **self.extra_gym_agent_kvargs
+                )
+                self_play_agents.append(new_sp_agent)
+        # instantiate gym agent and add it to config and gym object
+        nextid = len(background_config_state["agents"]) + background_config_args.get('n_self_play_agents', 0)
         gym_agent = self.gymAgentConstructor(
             nextid,
             "ABM",
@@ -76,7 +128,11 @@ class AbidesGymCoreEnv(gym.Env, ABC):
             state_buffer_length=self.state_buffer_length,
             **self.extra_gym_agent_kvargs,
         )
-        config_state = config_add_agents(background_config_state, [gym_agent])
+
+        agents.extend(self_play_agents) if len(self_play_agents) > 0 else agents
+        agents.append(gym_agent)
+        config_state = config_add_agents(background_config_state, agents)
+
         self.gym_agent = config_state["agents"][-1]
         # KERNEL
         # instantiate the kernel object
@@ -97,8 +153,17 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         kernel.initialize()
         # kernel will run until GymAgent has to take an action
         raw_state = kernel.runner()
+
+        # Now we also want to trigger the remaining agents in the environment with their raw_state and information
+
         state = self.raw_state_to_state(deepcopy(raw_state["result"]))
         info = self.raw_state_to_info(deepcopy(raw_state["result"]))
+
+        # Make sure the SP agents have the correct raw_state at this very instant
+        for sp_agent in self_play_agents:
+            sp_agent.update_raw_state()
+
+        self.self_play_agents = self_play_agents
         # attach kernel
         self.kernel = kernel
         return state, info

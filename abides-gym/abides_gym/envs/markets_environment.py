@@ -34,14 +34,14 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
     raw_state_pre_process = markets_agent_utils.identity_decorator
 
     def __init__(
-        self,
-        background_config_pair: Tuple[Callable, Optional[Dict[str, Any]]],
-        wakeup_interval_generator: InterArrivalTimeGenerator,
-        starting_cash: int,
-        state_buffer_length: int,
-        market_data_buffer_length: int,
-        first_interval: Optional[NanosecondTime] = None,
-        raw_state_pre_process=markets_agent_utils.identity_decorator,
+            self,
+            background_config_pair: Tuple[Callable | List[Callable], Optional[Dict[str, Any]]],
+            wakeup_interval_generator: InterArrivalTimeGenerator,
+            starting_cash: int,
+            state_buffer_length: int,
+            market_data_buffer_length: int,
+            first_interval: Optional[NanosecondTime] = None,
+            saved_models_location: str = None
     ) -> None:
         super().__init__(
             background_config_pair,
@@ -49,6 +49,7 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
             state_buffer_length,
             first_interval=first_interval,
             gymAgentConstructor=FinancialGymAgent,
+            saved_models_location=saved_models_location
         )
         self.starting_cash: int = starting_cash
         self.market_data_buffer_length: int = market_data_buffer_length
@@ -58,6 +59,7 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
         }
         self.extra_background_config_kvargs = {
             "exchange_log_orders": False,
-            "book_logging": False,  # may need to set to True if wants to return OB in terminal state when episode ends (gym2)
-            "log_orders": None,
+            "book_logging": False,
+            # may need to set to True if wants to return OB in terminal state when episode ends (gym2)
+            "log_orders": None
         }
