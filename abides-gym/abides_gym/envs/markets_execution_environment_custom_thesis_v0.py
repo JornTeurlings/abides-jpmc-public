@@ -918,8 +918,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,
                 "reserv_price": abs(reserv - (best_bid + best_ask) / 2) if reserv else self.last_mid_price,
-                "spread_width": spread_width,
-                "spread_dist": self.action
+                "spread_width": spread_width
             }
         else:
             return asdict(self.custom_metrics_tracker)
