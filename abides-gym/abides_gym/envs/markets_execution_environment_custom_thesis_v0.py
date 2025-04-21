@@ -387,8 +387,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         if not self.uses_beta:
             # This means it uses TanH so it has to be shifted up by 1 and divided by 2
-            res_val = (res_val + 1) / 2
-            spread_val = (spread_val + 1) / 2
+            spread_val = (spread_val + 1) / 2  # We need to stay in the range of (0, 1)
+        else:
+            res_val = 2 * res_val - 1  # We need to go to (-1, 1)
 
         # Reservation Price
         reservation_price = mid_price - self.reservation_quote * mid_price * res_val
