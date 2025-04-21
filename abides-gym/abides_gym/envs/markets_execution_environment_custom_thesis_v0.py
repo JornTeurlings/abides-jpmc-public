@@ -118,7 +118,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             tuning_params: Dict[str, any] = {},
             domain_randomization_envs: List[str] = [],
             background_config_extra_kvargs: Dict[str, Any] = {},
-            saved_models_location: str | None = None
+            saved_models_location: str | None = None,
+            uses_beta: bool = False
     ) -> None:
         if background_config == 'random':
             self.background_config = [
@@ -140,6 +141,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.execution_window: int = str_to_ns(execution_window)
         self.direction: str = direction
         self.debug_mode: bool = debug_mode
+        self.uses_beta = uses_beta
 
         self.too_much_reward_update: int = too_much_reward_update
         self.not_enough_reward_update: int = not_enough_reward_update
@@ -375,19 +377,24 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         """
         Function for calculating the bid-ask spread based on the input
         Args:
-            spread_val: x in (0, 1) to indicate how wide the spread will be
-            res_val: y in (0, 1) to indicate how far off the mid-price we will quote our mid-price
+            spread_val: x in (-1, 1) to indicate how wide the spread will be
+            res_val: y in (-1, 1) to indicate how far off the mid-price we will quote our mid-price
 
         Returns: The bid-price and ask-price that will be quoted
 
         """
         mid_price = self.last_mid_price  # ~100,000
 
+        if not self.uses_beta:
+            # This means it uses TanH so it has to be shifted up by 1 and divided by 2
+            res_val = (res_val + 1) / 2
+            spread_val = (spread_val + 1) / 2
+
         # Reservation Price
-        reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
+        reservation_price = mid_price - self.reservation_quote * mid_price * res_val
 
         # Spread (split in half around the reservation_price)
-        spread_val = min(max((spread_val + 1) / 2, 0), 1)
+        spread_val = min(max(spread_val, 0), 1)
         half_spread = (spread_val * self.max_spread * mid_price) / 2.0
 
         bid_price = round(reservation_price - half_spread)
@@ -405,6 +412,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         Returns: The bid-price and ask-price that will be quoted
 
         """
+        if not self.uses_beta:
+            bid_val = (bid_val + 1) / 2
+            ask_val = (ask_val + 1) / 2
+
         mid_price = self.last_mid_price  # ~100,000
 
         bid_price = round(mid_price * (1 - bid_val))
@@ -414,10 +425,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
     def _map_action_space_to_ABIDES_SIMULATOR_SPACE(self, action: list):
         """
-        action is a 4D float array:
-          [bid_offset, ask_offset, bid_size_float, ask_size_float]
+        action is a 2D float array:
+            [spread_val, reservation_val]
 
-        We'll round the size floats to integers for the order instructions.
         """
 
         action_1, action_2 = action[:2]
@@ -908,7 +918,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,
                 "reserv_price": abs(reserv - (best_bid + best_ask) / 2) if reserv else self.last_mid_price,
-                "spread_width": spread_width
+                "spread_width": spread_width,
+                "spread_dist": self.action
             }
         else:
             return asdict(self.custom_metrics_tracker)
