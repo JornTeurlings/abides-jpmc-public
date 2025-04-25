@@ -95,6 +95,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         tp_t: float = 0
         fr_t: float = 0
         tip_t: float = 0
+        bid_penalty: float = 0
+        ask_penalty: float = 0
         reward: float = 0
 
     def __init__(
@@ -326,6 +328,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market: int = self.starting_cash
 
         # Penalty for the inventory
+        self.out_of_spread_error: float = tuning_params.get('out_of_spread_error', 300)
         self.fill_ratio_bonus: float = tuning_params.get("fill_ratio_bonus", 100)
         self.tpt_weight: float = tuning_params.get('tpt_weight', 0.001)
         self.dpt_eta: float = tuning_params.get('dpt_eta', 0.2)
@@ -341,6 +344,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.direct_action = tuning_params.get('direction_action', False)
 
         # Some default values for initialization
+        self.last_spread = 0
+        self.last_bid_action = 0
+        self.last_ask_action = 0
         self.last_action_1 = 0
         self.last_action_2 = 0
 
@@ -373,7 +379,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.direct_action = self.environment_configuration.get('direct_action', False)
         self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
 
-    def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
+    def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[
+        int, int, float | None]:
         """
         Function for calculating the bid-ask spread based on the input
         Args:
@@ -392,7 +399,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             res_val = 2 * res_val - 1  # We need to go to (-1, 1)
 
         # Reservation Price
-        reservation_price = mid_price - self.reservation_quote * mid_price * res_val
+        reservation_price = mid_price - (self.last_spread / 2) * res_val
 
         # Spread (split in half around the reservation_price)
         spread_val = min(max(spread_val, 0), 1)
@@ -456,6 +463,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "limit_price": ask_price
         })
 
+        # Set for computing reward errors in later stage
+        self.last_bid_action = bid_price
+        self.last_ask_action = ask_price
         self.orders_submitted += 2
         return instructions
 
@@ -597,6 +607,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_bids = bids[0]
         self.previous_asks = asks[0]
         self.previous_depth = depth
+        self.last_spread = spreads[-1]
 
         # 12) Build final state vector
         # Keep your enumerated structure, but use dimensionless/log scaled features
@@ -618,6 +629,41 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.step_index += 1
 
         return computed_state.reshape(self.num_state_features, 1)
+
+    def compute_mid_price_ask_bid(self, raw_state: Dict[str, Any]):
+        """
+        Compute the mid_price, best_ask and best_bid
+        Args:
+            raw_state:
+
+        Returns:    (mid_price, bid, ask)
+
+        """
+        bids = raw_state["parsed_mkt_data"]["bids"]
+        asks = raw_state["parsed_mkt_data"]["asks"]
+        last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
+
+        mid_prices = [
+            markets_agent_utils.get_mid_price(bid, ask, lt)
+            for (bid, ask, lt) in zip(bids, asks, last_transactions)
+        ]
+        mid_price = mid_prices[-1]  # current mid
+
+        # 6) Best bids / asks
+        best_bids = [
+            b[0][0] if len(b) > 0 else mp
+            for (b, mp) in zip(bids, mid_prices)
+        ]
+        best_asks = [
+            a[0][0] if len(a) > 0 else mp
+            for (a, mp) in zip(asks, mid_prices)
+        ]
+
+        best_bid = best_bids[-1]
+        best_ask = best_asks[-1]
+        mid_price = (best_bid + best_ask) / 2
+
+        return mid_price, best_bid, best_ask
 
     def compute_tpt(self, raw_state: Dict[str, Any], mid_price=None) -> float:
         #######################################################
@@ -666,7 +712,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
           - IP_t = Inventory Punishment (eq. 15)
         """
         #######################################################
-        # 1) Compute current 'value_t' = cash + inv * mid_price
+        #  Compute current 'value_t' = cash + inv * mid_price
         #######################################################
         holdings = raw_state["internal_data"]["holdings"]
         cash = raw_state["internal_data"]["cash"]
@@ -678,7 +724,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         value_t = cash + holdings * mid_price
 
         #######################################################
-        # 2) Dampened PnL (DP_t)
+        #  Dampened PnL (DP_t)
         #    DP_t = DeltaPnL_t - max(0, eta * DeltaPnL_t)
         #######################################################
         # If step_index == 0, you can init self.previous_value:
@@ -703,7 +749,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market = value_t
 
         #######################################################
-        # 3) Trading PnL (TP_t)
+        #  Trading PnL (TP_t)
         #    For each fill in inter_wakeup_executed_orders, sum
         #    fill_qty * (mid_price - fill_price_for_BUY)
         #    or handle sign if SELL.
@@ -712,24 +758,14 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         tp_t = beta * self.compute_tpt(raw_state, mid_price)
 
         #######################################################
-        # 4) Inventory Punishment (IP_t)
+        #  Inventory Punishment (IP_t)
         #    IP_t = zeta * (holdings^2)
         #######################################################
         zeta = self.inventory_penalty
         ip_t = zeta * (holdings ** 2)
 
         #######################################################
-        # 5) Terminal Inventory Punishment (TIP_t)
-        #    TIP_t = eta * (holdings^2)
-        #######################################################
-        qeta = self.terminal_inventory_penalty  # Default η value
-        if raw_state["internal_data"]["current_time"] >= raw_state['internal_data']['mkt_open'] + self.execution_window:
-            tip_t = qeta * (holdings ** 3)
-        else:
-            tip_t = 0
-
-        #######################################################
-        # 6) Fill Ratio (FR_t)
+        #  Fill Ratio (FR_t)
         #    FR_t = alpha * (FR - 0.5)
         #######################################################
         total_volume = sum([x[0] for x in raw_state["internal_data"]["parsed_inter_wakeup_executed_orders"]])
@@ -740,22 +776,38 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         fr_t = alpha * (fill_ratio - 0.5)  # Center fill ratio effect around 0
 
         #######################################################
-        # 5) Combine for final reward
-        #    R_t = DP_t + TP_t - IP_t - TIP_t + FR_t
+        #  Combine for final reward
+        #    R_t = DP_t + TP_t - IP_t
         #######################################################
-        reward = (dp_t + tp_t - ip_t + tip_t + fr_t) / self.parent_order_size
+        reward = (dp_t + tp_t - ip_t) / self.parent_order_size
 
         #######################################################
-        # Add any other terms you want:
-        #    - Terminal penalty if time is up
-        #    - Fill ratio or alpha for fill speed
+        #  Quote outside of current spread error
         #######################################################
+        last_bid = self.last_bid_action
+        last_ask = self.last_ask_action
+
+        market_bid = self.last_mid_price - self.last_spread / 2
+        market_ask = self.last_mid_price + self.last_spread / 2
+
+        # We penalize if the bid_price and ask_price are way below the current market and the reservation_price
+        # is way off the mid_price
+        bid_penalty, ask_penalty = 0, 0
+        if last_bid < market_bid:
+            bid_penalty = abs(market_bid - last_bid) * self.out_of_spread_error
+
+        if last_ask > market_ask:
+            ask_penalty = abs(market_ask - last_ask) * self.out_of_spread_error
+
+        # add the penalties to the reward
+        reward = reward - (bid_penalty + ask_penalty)
+        self.custom_metrics_tracker.bid_penalty = bid_penalty
+        self.custom_metrics_tracker.ask_penalty = ask_penalty
 
         self.custom_metrics_tracker.dp_t = dp_t
         self.custom_metrics_tracker.tp_t = tp_t
         self.custom_metrics_tracker.ip_t = ip_t
         self.custom_metrics_tracker.fr_t = fr_t
-        self.custom_metrics_tracker.tip_t = tip_t
         self.custom_metrics_tracker.reward = reward
 
         return reward
@@ -794,6 +846,16 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             )  # executed sell too much
         else:
             update_reward = self.just_quantity_reward_update
+
+        current_time = raw_state["internal_data"]["current_time"]
+        mkt_open = raw_state["internal_data"]["mkt_open"]
+        time_limit = mkt_open + self.first_interval + self.execution_window
+
+        # Penalized if the agent does not finish the episode
+        if current_time <= time_limit:
+            update_reward -= 100_000 * (time_limit - current_time) / current_time
+
+        update_reward += self.terminal_inventory_penalty * (holdings ** 3)
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
@@ -911,6 +973,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "holdings": holdings,
                 "parent_size": self.parent_order_size,
                 "mtm_pnl": self.previous_marked_to_market - self.starting_cash,
+                "bid_penalty": self.custom_metrics_tracker.bid_penalty,
+                "ask_penalty": self.custom_metrics_tracker.ask_penalty,
                 "tp_t": self.custom_metrics_tracker.tp_t,
                 "dp_t": self.custom_metrics_tracker.dp_t,
                 "ip_t": self.custom_metrics_tracker.ip_t,
@@ -918,7 +982,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "reward": reward,
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,
-                "reserv_price": abs(reserv - (best_bid + best_ask) / 2) if reserv else self.last_mid_price,
+                "reserv_price": abs(reserv) if reserv else self.last_mid_price,
                 "spread_width": spread_width
             }
         else:
