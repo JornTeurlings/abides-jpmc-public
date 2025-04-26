@@ -851,11 +851,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         mkt_open = raw_state["internal_data"]["mkt_open"]
         time_limit = mkt_open + self.first_interval + self.execution_window
 
-        # Penalized if the agent does not finish the episode
-        if current_time <= time_limit:
-            update_reward -= 100_000 * (time_limit - current_time) / current_time
+        # Penalized if the agent does not finish the episode (not sure if this works though)
+        # if current_time <= time_limit:
+        #     update_reward -= 100_000 * (time_limit - current_time) / current_time
 
-        update_reward += self.terminal_inventory_penalty * (holdings ** 3)
+        update_reward -= self.terminal_inventory_penalty * (holdings ** 3)
 
         # 4) Normalization
         update_reward = update_reward / self.parent_order_size
