@@ -328,7 +328,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market: int = self.starting_cash
 
         # Penalty for the inventory
-        self.out_of_spread_error: float = tuning_params.get('out_of_spread_error', 300)
+        self.out_of_spread_error: float = tuning_params.get('out_of_spread_error', 0.5)
         self.fill_ratio_bonus: float = tuning_params.get("fill_ratio_bonus", 100)
         self.tpt_weight: float = tuning_params.get('tpt_weight', 0.001)
         self.dpt_eta: float = tuning_params.get('dpt_eta', 0.2)
@@ -794,10 +794,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # is way off the mid_price
         bid_penalty, ask_penalty = 0, 0
         if last_bid < market_bid:
-            bid_penalty = abs(market_bid - last_bid) * self.out_of_spread_error
+            bid_penalty = min(math.exp(abs(market_bid - last_bid) - 4) * self.out_of_spread_error, 100_000)
 
         if last_ask > market_ask:
-            ask_penalty = abs(market_ask - last_ask) * self.out_of_spread_error
+            ask_penalty = min(math.exp(abs(market_ask - last_ask) - 4) * self.out_of_spread_error, 100_000)
 
         # add the penalties to the reward
         reward = reward - (bid_penalty + ask_penalty)
