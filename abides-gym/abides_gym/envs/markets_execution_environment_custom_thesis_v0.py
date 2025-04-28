@@ -794,10 +794,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # is way off the mid_price
         bid_penalty, ask_penalty = 0, 0
         if last_bid < market_bid:
-            bid_penalty = math.exp(abs(market_bid - last_bid) - 4) * self.out_of_spread_error
+            bid_penalty = min(math.exp(abs(market_bid - last_bid) - 4) * self.out_of_spread_error, 100_000)
 
         if last_ask > market_ask:
-            ask_penalty = math.exp(abs(market_ask - last_ask) - 4) * self.out_of_spread_error
+            ask_penalty = min(math.exp(abs(market_ask - last_ask) - 4) * self.out_of_spread_error, 100_000)
 
         # add the penalties to the reward
         reward = reward - (bid_penalty + ask_penalty)
