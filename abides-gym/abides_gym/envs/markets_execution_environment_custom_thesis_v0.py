@@ -16,16 +16,56 @@ from .markets_environment import AbidesGymMarketsEnv
 from abides_markets.orders import LimitOrder
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#  Plug-and-Play Auto-Scaler for reward components
+# ──────────────────────────────────────────────────────────────────────────────
+from collections import defaultdict
+
+class RewardScaler:
+    """
+    Keeps each stream mean-free and fixes its on-line std to sigma_target.
+    centring=True → subtract running mean so logged values hover near 0.
+    """
+
+    def __init__(self,
+                 sigma_target: float = 0.05,
+                 alpha: float = 5e-2,  # adapts in ≈ 1/alpha steps
+                 min_scale: float = 0.05,
+                 max_scale: float = 20.0):
+        self.sigma_target = sigma_target
+        self.alpha = alpha
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.stats = defaultdict(lambda: {"mean": 0.0, "var": 1.0})
+        self.scales = defaultdict(lambda: 1.0)
+
+    def _update(self, key: str, x: float):
+        s = self.stats[key]
+        delta = x - s["mean"]
+        s["mean"] += self.alpha * delta
+        s["var"] += self.alpha * (delta * (x - s["mean"]) - s["var"])
+        s["var"] = max(s["var"], 1e-6)
+
+    def scale(self, key: str, x: float, centre: bool = True) -> float:
+        self._update(key, x)
+        mean, var = self.stats[key]["mean"], self.stats[key]["var"]
+        scale = self.sigma_target / (var ** 0.5 + 1e-8)
+        scale = max(self.min_scale, min(self.max_scale, scale))
+        self.scales[key] = scale
+        centred = x - mean if centre else x
+        return centred * scale
+
+
 class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
     """
-    Execution V0 environnement. It defines one of the ABIDES-Gym-markets environnement.
-    This environment presents an example of the algorithmic orderexecution problem.
+    Execution V0 environment. It defines one of the ABIDES-Gym-markets environment.
+    This environment presents an example of the algorithmic order execution problem.
     The agent has either an initial inventory of the stocks it tries to trade out of or no initial inventory and
-    tries to acquire a target number of shares. The goal is to realize thistask while minimizing transaction cost from spreads
-     and marketimpact. It does so by splitting the parent order into several smallerchild orders.
+    tries to acquire a target number of shares. The goal is to realize this task while minimizing transaction cost from spreads
+     and market impact. It does so by splitting the parent order into several smaller child orders.
 
     Arguments:
-        - background_config: the handcrafted agents configuration used for the environnement
+        - background_config: the handcrafted agents configuration used for the environment
         - mkt_close: time the market day ends
         - timestep_duration: how long between 2 wakes up of the gym experimental agent
         - starting_cash: cash of the agents at the beginning of the simulation
@@ -94,6 +134,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         ip_t: float = 0
         tp_t: float = 0
         fr_t: float = 0
+        cp_t: float = 0
         tip_t: float = 0
         bid_penalty: float = 0
         ask_penalty: float = 0
@@ -288,7 +329,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 1,  # time_pct
                 10,  # diff_pct
                 1,  # imbalance_all
-                1,  # spread
+                np.finfo(np.float32).max,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
                 10,  # depth (set an upper bound for depth)
@@ -307,7 +348,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # time_pct
                 -10,  # diff_pct
                 -1,  # imbalance_all
-                0,  # spread
+                np.finfo(np.float32).min,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
                 0,  # depth (depth cannot be negative)
@@ -343,6 +384,17 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.max_spread = tuning_params.get('max_spread', 0.001)
         self.direct_action = tuning_params.get('direction_action', False)
 
+        self.kappa = tuning_params.get('kappa', 0.05)
+        self.lambda_r = tuning_params.get('lambda_r', 1e-3)
+
+
+        self.scale_rew = tuning_params.get('scale_rew', False)
+        self.dpt_importance = tuning_params.get('dpt_importance', 1)
+        self.tpt_importance = tuning_params.get('tpt_importance', 1)
+        self.cpt_importance = tuning_params.get('cpt_importance', 1)
+        self.ipt_importance = tuning_params.get('ipt_importance', 1)
+        self.frt_importance = tuning_params.get('frt_importance', 1)
+
         # Some default values for initialization
         self.last_spread = 0
         self.last_bid_action = 0
@@ -366,6 +418,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # This is needed to make self-play work
         self.set_environment_configuration(environment_config)
+        self.rscaler = RewardScaler(sigma_target=0.05, min_scale=0.0001)
 
         self.parent_order_size = self.environment_configuration['parent_order_size']
         self.execution_window = str_to_ns(self.environment_configuration['execution_window'])
@@ -531,11 +584,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
         # Scale mid_price to ~ 1 range if needed
-        scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around -1
+        scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around 1
 
         # Spread as fraction of mid
         spreads = np.array(best_asks) - np.array(best_bids)
-        spread = spreads[-1] / self.last_mid_price  # dimensionless relative to mid_price < 1/2
+        spread = spreads[-1]  # dimensionless relative to mid_price < 1/2
 
         # 7) Log returns
         # Replace raw differences with log(m_i / m_(i-1))
@@ -665,150 +718,104 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         return mid_price, best_bid, best_ask
 
-    def compute_tpt(self, raw_state: Dict[str, Any], mid_price=None) -> float:
-        #######################################################
-        # Trading PnL (TP_t)
-        #    For each fill in inter_wakeup_executed_orders, sum
-        #    fill_qty * (mid_price - fill_price_for_BUY)
-        #    or handle sign if SELL.
-        #######################################################
-        if not mid_price:
+    #
+    # ────────────────────────────────────────────────────────────────────────────────
+    #  Reward helpers
+    # ────────────────────────────────────────────────────────────────────────────────
+    #
+
+    # ────────────────────────────────────────────────────────────────────────────────
+    #  Helper: Trading-PnL per step
+    # ────────────────────────────────────────────────────────────────────────────────
+    def compute_tpt(self, raw_state: Dict[str, Any], mid_price: float | None = None) -> float:
+        """
+        TP_t (Trading-PnL):
+            Σ   qty   · (mid_price − fill_price)
+            qty  > 0  for BUY fills,
+            qty  < 0  for SELL fills.
+        Returns the *raw* value (no weighting, no scaling).
+        """
+        if mid_price is None:
             mid_price = self.last_mid_price
-        inter_wakeup_executed_orders = raw_state["internal_data"]["inter_wakeup_executed_orders"]
-        tp_t = 0.0
-        if len(inter_wakeup_executed_orders) > 0 and isinstance(inter_wakeup_executed_orders[-1], List):
-            for fill in inter_wakeup_executed_orders[-1]:
-                qty = fill.quantity if fill.side.value == 'BID' else -fill.quantity  # positive if you bought, negative if sold
-                f_px = fill.fill_price  # the fill price
 
-                # If you store +qty for a buy, then:
-                # For a buy, advantage = qty * (mid_price - fill_price).
-                # For a sell, advantage = qty * (fill_price - mid_price),
-                # but qty < 0 in that case. That means the same formula works:
-                #   "tp_t += qty * (mid_price - fill_price)"
-                # because if qty < 0, it's effectively fill_price - mid_price.
-                tp_t += qty * (mid_price - f_px)
-        elif len(inter_wakeup_executed_orders) > 0 and isinstance(inter_wakeup_executed_orders[-1], LimitOrder):
-            for fill in inter_wakeup_executed_orders:
-                qty = fill.quantity if fill.side.value == 'BID' else -fill.quantity  # positive if you bought, negative if sold
-                f_px = fill.fill_price  # the fill price
+        executed = raw_state["internal_data"]["inter_wakeup_executed_orders"]
+        if not executed:
+            return 0.0
 
-                # If you store +qty for a buy, then:
-                # For a buy, advantage = qty * (mid_price - fill_price).
-                # For a sell, advantage = qty * (fill_price - mid_price),
-                # but qty < 0 in that case. That means the same formula works:
-                #   "tp_t += qty * (mid_price - fill_price)"
-                # because if qty < 0, it's effectively fill_price - mid_price.
-                tp_t += qty * (mid_price - f_px)
-        return tp_t
+        fills = executed[-1] if isinstance(executed[-1], list) else executed
+        tp_raw = 0.0
+        for fill in fills:
+            qty_signed = fill.quantity if fill.side.value == "BID" else -fill.quantity
+            tp_raw += qty_signed * (mid_price - fill.fill_price)
+        return tp_raw
 
+    # ---------------------------------------------------------------------------
+    #  Main reward • put this inside your Env class
+    # ---------------------------------------------------------------------------
     def compute_reward(self, raw_state: Dict[str, Any]) -> float:
         """
-        Implements the hybrid reward function from the snippet:
-            R_t = DP_t + TP_t - IP_t
-        where:
-          - DP_t = Dampened PnL (eqs. 12-13)
-          - TP_t = Trading PnL (eq. 14)
-          - IP_t = Inventory Punishment (eq. 15)
+        R_t = Σ   importance_i · scaler_i(centered(raw_i))
+              -   bid/ask cliff penalties
+        All values are already small (≈ ±0.05) so no further normalisation.
         """
-        #######################################################
-        #  Compute current 'value_t' = cash + inv * mid_price
-        #######################################################
+        # --- market snapshot ----------------------------------------------------
         holdings = raw_state["internal_data"]["holdings"]
         cash = raw_state["internal_data"]["cash"]
+        mid_px = self.last_mid_price
+        value_t = cash + holdings * mid_px
 
-        # Use your current mid_price
-        mid_price = self.last_mid_price  # you store this each step in raw_state_to_state
-
-        # current total value
-        value_t = cash + holdings * mid_price
-
-        #######################################################
-        #  Dampened PnL (DP_t)
-        #    DP_t = DeltaPnL_t - max(0, eta * DeltaPnL_t)
-        #######################################################
-        # If step_index == 0, you can init self.previous_value:
-        if self.step_index == 0 and not hasattr(self, "previous_value"):
+        # --- ΔPnL, dampened -----------------------------------------------------
+        if self.step_index == 0 and not hasattr(self, "prev_value"):
             self.previous_marked_to_market = value_t
-
-        # Delta PnL
-        delta_pnl_t = value_t - self.previous_marked_to_market
-
-        # Dampened PnL
-        eta = self.dpt_eta
-        if delta_pnl_t > 0:
-            dp_t = delta_pnl_t * (1.0 - eta)
-        else:
-            dp_t = delta_pnl_t
-
-        qta = self.dpt_weight
-        # Reward scaling is necessay
-        dp_t *= qta
-
-        # update for next step
+        delta_pnl = value_t - self.previous_marked_to_market
+        dp_raw = (delta_pnl * (1 - self.dpt_eta)
+                  if delta_pnl > 0 else delta_pnl)
         self.previous_marked_to_market = value_t
 
-        #######################################################
-        #  Trading PnL (TP_t)
-        #    For each fill in inter_wakeup_executed_orders, sum
-        #    fill_qty * (mid_price - fill_price_for_BUY)
-        #    or handle sign if SELL.
-        #######################################################
-        beta = self.tpt_weight
-        tp_t = beta * self.compute_tpt(raw_state, mid_price)
+        # --- Trading-PnL --------------------------------------------------------
+        tp_raw = self.compute_tpt(raw_state, mid_px)
 
-        #######################################################
-        #  Inventory Punishment (IP_t)
-        #    IP_t = zeta * (holdings^2)
-        #######################################################
-        zeta = self.inventory_penalty
-        ip_t = zeta * (holdings ** 2)
+        # --- Inventory & centre penalties --------------------------------------
+        ip_raw = self.inventory_penalty * holdings ** 2
 
-        #######################################################
-        #  Fill Ratio (FR_t)
-        #    FR_t = alpha * (FR - 0.5)
-        #######################################################
-        total_volume = sum([x[0] for x in raw_state["internal_data"]["parsed_inter_wakeup_executed_orders"]])
-        fill_ratio = total_volume / (2 * self.order_fixed_size)
-        alpha = self.fill_ratio_bonus
+        res_px = 0.5 * (self.last_bid_action + self.last_ask_action)
+        target_res = mid_px - self.kappa * holdings
+        cp_raw = self.lambda_r * (res_px - target_res) ** 2
 
-        # Normalize fill ratio contribution by considering relative weight
-        fr_t = alpha * (fill_ratio - 0.5)  # Center fill ratio effect around 0
+        # --- Fill-ratio bonus ---------------------------------------------------
+        tot_vol = sum(v for v, *_ in raw_state["internal_data"]["parsed_inter_wakeup_executed_orders"])
+        fr_raw = self.fill_ratio_bonus * (tot_vol / (2 * self.order_fixed_size) - 0.5)
 
-        #######################################################
-        #  Combine for final reward
-        #    R_t = DP_t + TP_t - IP_t
-        #######################################################
-        reward = (dp_t + tp_t - ip_t) / self.parent_order_size
+        # --- Centred variance-scale + importance knobs -------------------------
+        dp_t = self.dpt_importance * (self.rscaler.scale("DP", dp_raw, centre=False) if self.scale_rew else dp_raw)
+        tp_t = self.tpt_importance * (self.rscaler.scale("TP", tp_raw, centre=False) if self.scale_rew else  tp_raw)
+        ip_t = self.ipt_importance * (self.rscaler.scale("IP", ip_raw, centre=False) if self.scale_rew else  ip_raw)
+        cp_t = self.cpt_importance * (self.rscaler.scale("CP", cp_raw, centre=False) if self.scale_rew else cp_raw)
+        fr_t = self.frt_importance * (self.rscaler.scale("FR", fr_raw, centre=False) if self.scale_rew else fr_raw)
 
-        #######################################################
-        #  Quote outside of current spread error
-        #######################################################
-        last_bid = self.last_bid_action
-        last_ask = self.last_ask_action
+        # ↑ replace 1.0 with 0.5-5.0 to bias channels
+        # -------------------------------------------------------------
 
-        market_bid = self.last_mid_price - self.last_spread / 2
-        market_ask = self.last_mid_price + self.last_spread / 2
+        # --- Out-of-spread cliff (kept un-scaled) -------------------------------
+        mkt_bid = mid_px - self.last_spread / 2
+        mkt_ask = mid_px + self.last_spread / 2
+        bid_pen = math.exp(max(0, (mkt_bid - 2) - self.last_bid_action) - 4) * self.out_of_spread_error \
+            if self.last_bid_action < mkt_bid - 2 else 0.0
+        ask_pen = math.exp(max(0, self.last_ask_action - (mkt_ask + 2)) - 4) * self.out_of_spread_error \
+            if self.last_ask_action > mkt_ask + 2 else 0.0
+        bid_pen = min(bid_pen, 1e5)
+        ask_pen = min(ask_pen, 1e5)
 
-        # We penalize if the bid_price and ask_price are way below the current market and the reservation_price
-        # is way off the mid_price
-        bid_penalty, ask_penalty = 0, 0
-        if last_bid < market_bid:
-            bid_penalty = min(math.exp(abs(market_bid - last_bid) - 4) * self.out_of_spread_error, 100_000)
+        # --- Final reward -------------------------------------------------------
+        reward = dp_t + tp_t - ip_t - cp_t + fr_t - (bid_pen + ask_pen)
 
-        if last_ask > market_ask:
-            ask_penalty = min(math.exp(abs(market_ask - last_ask) - 4) * self.out_of_spread_error, 100_000)
-
-        # add the penalties to the reward
-        reward = reward - (bid_penalty + ask_penalty)
-        self.custom_metrics_tracker.bid_penalty = bid_penalty
-        self.custom_metrics_tracker.ask_penalty = ask_penalty
-
-        self.custom_metrics_tracker.dp_t = dp_t
-        self.custom_metrics_tracker.tp_t = tp_t
-        self.custom_metrics_tracker.ip_t = ip_t
-        self.custom_metrics_tracker.fr_t = fr_t
-        self.custom_metrics_tracker.reward = reward
+        # --- Debug metrics ------------------------------------------------------
+        t = self.custom_metrics_tracker
+        t.dp_t, t.tp_t, t.ip_t, t.cp_t, t.fr_t = dp_t, tp_t, ip_t, cp_t, fr_t
+        t.bid_penalty, t.ask_penalty = bid_pen, ask_pen
+        t.res_offset = res_px - target_res
+        t.abs_res_offset = abs(t.res_offset)
+        t.reward = reward
 
         return reward
 
@@ -836,14 +843,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         parent_order_size = self.parent_order_size
 
         # 3) Compute update_reward
-        if (holdings >= parent_order_size):
-            update_reward = (
-                    abs(holdings - parent_order_size) * self.too_much_reward_update
-            )  # executed buy too much
-        elif (holdings <= -parent_order_size):
-            update_reward = (
-                    abs(holdings - parent_order_size) * self.too_much_reward_update
-            )  # executed sell too much
+        if holdings >= 30 * parent_order_size:
+            update_reward = - 500_000 # executed buy too much
+        elif holdings <= - 30 * parent_order_size:
+            update_reward = - 500_000  # executed sell too much
         else:
             update_reward = self.just_quantity_reward_update
 
@@ -855,10 +858,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # if current_time <= time_limit:
         #     update_reward -= 100_000 * (time_limit - current_time) / current_time
 
-        update_reward -= self.terminal_inventory_penalty * (holdings ** 3)
+        update_reward -= self.terminal_inventory_penalty * (holdings ** 3) / self.parent_order_size
 
         # 4) Normalization
-        update_reward = update_reward / self.parent_order_size
+        update_reward = update_reward
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         return update_reward
@@ -893,9 +896,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         time_limit = mkt_open + self.first_interval + self.execution_window
 
         # 5) conditions
-        if holdings >= parent_order_size:
+        if holdings >= 30 * parent_order_size:
             done = True  # Buy parent order executed
-        elif holdings <= -parent_order_size:
+        elif holdings <= - 30 * parent_order_size:
             done = True  # Sell parent order executed
         elif current_time >= time_limit:
             done = True  # Mkt Close
@@ -958,6 +961,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             bid_price, ask_price, reserv = self.compute_bid_ask_reservation(self.last_action_1, self.last_action_2,
                                                                             extra_info=True)
         spread_width = ask_price - bid_price
+        market_spread = self.last_spread
+
+        # 🔹 SAFELY grab the current scales (start-up step they might not exist)
+        scales = getattr(self, "rscaler", None)
+        dp_scale = scales.scales.get("DP", 1.0) if scales else 1.0
+        tp_scale = scales.scales.get("TP", 1.0) if scales else 1.0
+        ip_scale = scales.scales.get("IP", 1.0) if scales else 1.0
+        cp_scale = scales.scales.get("CP", 1.0) if scales else 1.0
+        fr_scale = scales.scales.get("FR", 1.0) if scales else 1.0
 
         if self.debug_mode:
             return {
@@ -979,11 +991,18 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "dp_t": self.custom_metrics_tracker.dp_t,
                 "ip_t": self.custom_metrics_tracker.ip_t,
                 "fr_t": self.custom_metrics_tracker.fr_t,
+                "cp_t": self.custom_metrics_tracker.cp_t,
                 "reward": reward,
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,
                 "reserv_price": abs(reserv) if reserv else self.last_mid_price,
-                "spread_width": spread_width
+                "spread_width": spread_width,
+                "market_spread": market_spread,
+                "scale_dp": dp_scale,
+                "scale_tp": tp_scale,
+                "scale_ip": ip_scale,
+                "scale_cp": cp_scale,
+                "scale_fr": fr_scale,
             }
         else:
             return asdict(self.custom_metrics_tracker)
