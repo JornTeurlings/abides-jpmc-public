@@ -839,10 +839,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         method that transforms a raw state into the flag if an episode is done
 
         Arguments:
-            - raw_state: dictionnary that contains raw simulation information obtained from the gym experimental agent
+            - raw_state: dictionary that contains raw simulation information obtained from the gym experimental agent
 
         Returns:
-            - done: flag that describes if the episode is terminated or not  for the execution v0 environnement
+            - done: flag that describes if the episode is terminated or not  for the execution v0 environment
         """
         # episode can stop because market closes or because some condition is met
         # here the condition is parent order fully executed
@@ -884,13 +884,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
     @raw_state_pre_process
     def raw_state_to_info(self, raw_state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        method that transforms a raw state into an info dictionnary
+        method that transforms a raw state into an info dictionary
 
         Arguments:
-            - raw_state: dictionnary that contains raw simulation information obtained from the gym experimental agent
+            - raw_state: dictionary that contains raw simulation information obtained from the gym experimental agent
 
         Returns:
-            - reward: info dictionnary computed at each step for the execution v0 environnement
+            - reward: info dictionary computed at each step for the execution v0 environment
         """
         # Agent cannot use this info for taking decision
         # only for debugging
@@ -957,7 +957,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "reserv_price": abs(reserv) if reserv else self.last_mid_price,
                 "spread_width": spread_width,
                 "market_spread": market_spread,
-                "reward_components": self.custom_metrics_tracker.reward_components
+                "reward_components": self.custom_metrics_tracker.reward_components,
+                "our_bid": bid_price,
+                "our_ask": ask_price,
+                "time": raw_state["internal_data"]["current_time"]
             }
         else:
             return asdict(self.custom_metrics_tracker)
