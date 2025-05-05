@@ -308,7 +308,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 -2,  # holdings_pct
                 0,  # scaled_mid_price
                 0,  # time_pct
-                -2,  # diff_pct
+                -3,  # diff_pct
                 -1,  # imbalance_all
                 np.finfo(np.float32).min,  # spread
                 0,  # short_term_vol
