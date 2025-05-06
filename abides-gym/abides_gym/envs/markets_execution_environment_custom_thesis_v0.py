@@ -422,6 +422,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         bid_price = round(reservation_price - half_spread)
         ask_price = round(reservation_price + half_spread)
 
+        if bid_price == ask_price:
+            ask_price += 1
+
         return bid_price, ask_price, reservation_price if extra_info else None
 
     def compute_bid_ask_direct(self, bid_val, ask_val) -> tuple[int, int, float | None]:
