@@ -95,6 +95,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         tp_t: float = 0
         fr_t: float = 0
         cp_t: float = 0
+        cl_t: float = 0
         tip_t: float = 0
         bid_penalty: float = 0
         ask_penalty: float = 0
@@ -165,16 +166,12 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         assert background_config in [
             "rmsc03",
             "rmsc04",
-            "smc_01",
-            "test",
-            "momentum",
-            "high_liq",
-            "high_vol_shock",
-            "low_info",
-            "exec_pressure",
-            "low_liq",
+            "high_liq_comp",
+            "high_liq_many_agents",
+            "high_vol_jump",
+            "stable_mm",
+            "structural_intelligent",
             "random",
-            "single_agent_env"
         ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
@@ -498,9 +495,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # ---------------------------
         # 0) Preliminary
         # ---------------------------
-        bids = raw_state["parsed_mkt_data"]["bids"]
-        asks = raw_state["parsed_mkt_data"]["asks"]
-        last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
+        bids = raw_state["parsed_mkt_data"].get("bids", [])
+        asks = raw_state["parsed_mkt_data"].get("asks", [])
+        last_transactions = raw_state["parsed_mkt_data"].get("last_transaction", [])
+        if len(bids) == 0 or len(asks) == 0:
+            print(f'Either bids or asks are empty at current step: {self.step_index}')
 
         bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1]
         ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1]
@@ -751,13 +750,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         buf = 2
 
         bid_pen = (
-            math.exp(max(0.0, (mkt_bid - buf) - self.last_bid_action) - 4.0)
-            * self.out_of_spread_error
+            max(math.exp(max(0.0, (mkt_bid - buf) - self.last_bid_action) - 4.0), 10_000)
             if self.last_bid_action < mkt_bid - buf else 0.0
         )
         ask_pen = (
-            math.exp(max(0.0, self.last_ask_action - (mkt_ask + buf)) - 4.0)
-            * self.out_of_spread_error
+            max(math.exp(max(0.0, self.last_ask_action - (mkt_ask + buf)) - 4.0), 10_000)
             if self.last_ask_action > mkt_ask + buf else 0.0
         )
 
@@ -775,6 +772,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.custom_metrics_tracker.fr_t = fr_raw
         self.custom_metrics_tracker.ip_t = ip_raw
         self.custom_metrics_tracker.cp_t = cp_raw
+        self.custom_metrics_tracker.cl_t = bid_pen + ask_pen
         self.custom_metrics_tracker.bid_penalty = bid_pen
         self.custom_metrics_tracker.ask_penalty = ask_pen
         self.custom_metrics_tracker.reward_components = comps
@@ -954,6 +952,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "ip_t": self.custom_metrics_tracker.ip_t,
                 "fr_t": self.custom_metrics_tracker.fr_t,
                 "cp_t": self.custom_metrics_tracker.cp_t,
+                "cl_t": self.custom_metrics_tracker.cl_t ,
                 "reward": reward,
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,

@@ -42,7 +42,7 @@ def build_config(
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent
-        num_noise_agents=0,
+        num_noise_agents=2000,
         # 3) Value Agents
         num_value_agents=100,
         r_bar=100_000,  # true mean fundamental value
@@ -51,13 +51,13 @@ def build_config(
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-5,  # Volatility of fundamental time series (std).
+        fund_vol=5e-3,  # Volatility of fundamental time series (std).
         megashock_lambda_a=2.77778e-18,
         megashock_mean=1000,
         megashock_var=50_000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-        num_mm_agents=1,
+        num_mm_agents=2,
         mm_window_size="adaptive",
         mm_pov=0.025,
         mm_num_ticks=10,
@@ -72,12 +72,10 @@ def build_config(
         # 5) Momentum Agents
         num_momentum_agents=100,
         # 6) Self Play Agents
-        n_self_play_agents=0,
-        # POV Execution Agents,
-        num_pov_execution_agents = 0,
+        n_self_play_agents=0
 ):
     """
-    create the background configuration for rmsc04
+    create the background configuration for high_liq
     These are all the non-learning agent that will run in the simulation
     :param seed: seed of the experiment
     :type seed: int
@@ -106,7 +104,7 @@ def build_config(
     mm_wake_up_freq = str_to_ns(mm_wake_up_freq)
 
     # order size model
-    ORDER_SIZE_MODEL = OrderSizeModel(heavy_model=True)  # Order size model
+    ORDER_SIZE_MODEL = OrderSizeModel()  # Order size model
     # market marker derived parameters
     MM_PARAMS = [(mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size) for _ in
                  range(num_mm_agents)]

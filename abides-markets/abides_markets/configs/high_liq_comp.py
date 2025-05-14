@@ -42,19 +42,19 @@ def build_config(
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent
-        num_noise_agents=8000,
+        num_noise_agents=400,
         # 3) Value Agents
-        num_value_agents=150,
+        num_value_agents=400,
         r_bar=100_000,  # true mean fundamental value
         kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
         lambda_a=5.7e-12,  # ValueAgent arrival rate
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-5,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=2.77778e-18,
-        megashock_mean=1000,
-        megashock_var=50_000,
+        fund_vol=3e-3,  # Volatility of fundamental time series (std).
+        megashock_lambda_a=5e-17,
+        megashock_mean=2000,
+        megashock_var=100_000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
         num_mm_agents=4,
@@ -70,7 +70,7 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=25,
+        num_momentum_agents=400,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):
