@@ -29,49 +29,49 @@ from abides_markets.utils import generate_latency_model
 
 
 def build_config(
-    seed=int(datetime.now().timestamp() * 1_000_000) % (2**32 - 1),
-    date="20210205",
-    end_time="10:00:00",
-    stdout_log_level="INFO",
-    ticker="ABM",
-    starting_cash=10_000_000,  # Cash in this simulator is always in CENTS.
-    log_orders=True,  # if True log everything
-    # 1) Exchange Agent
-    book_logging=True,
-    book_log_depth=10,
-    stream_history_length=500,
-    exchange_log_orders=None,
-    # 2) Noise Agent
-    num_noise_agents=1000,
-    # 3) Value Agents
-    num_value_agents=102,
-    r_bar=100_000,  # true mean fundamental value
-    kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
-    lambda_a=5.7e-12,  # ValueAgent arrival rate
-    # oracle
-    kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
-    sigma_s=0,
-    fund_vol=5e-5,  # Volatility of fundamental time series (std).
-    megashock_lambda_a=2.77778e-18,
-    megashock_mean=1000,
-    megashock_var=50_000,
-    # 4) Market Maker Agents
-    # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-    mm_window_size="adaptive",
-    mm_pov=0.025,
-    mm_num_ticks=10,
-    mm_wake_up_freq="60s",
-    mm_min_order_size=1,
-    mm_skew_beta=0,
-    mm_price_skew=4,
-    mm_level_spacing=5,
-    mm_spread_alpha=0.75,
-    mm_backstop_quantity=0,
-    mm_cancel_limit_delay=50,  # 50 nanoseconds
-    # 5) Momentum Agents
-    num_momentum_agents=12,
-    # 6) Self Play Agents,
-    n_self_play_agents=0
+        seed=int(datetime.now().timestamp() * 1_000_000) % (2 ** 32 - 1),
+        date="20210205",
+        end_time="10:00:00",
+        stdout_log_level="INFO",
+        ticker="ABM",
+        starting_cash=10_000_000,  # Cash in this simulator is always in CENTS.
+        log_orders=True,  # if True log everything
+        # 1) Exchange Agent
+        book_logging=True,
+        book_log_depth=10,
+        stream_history_length=500,
+        exchange_log_orders=None,
+        # 2) Noise Agent
+        num_noise_agents=1000,
+        # 3) Value Agents
+        num_value_agents=102,
+        r_bar=100_000,  # true mean fundamental value
+        kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
+        lambda_a=5.7e-12,  # ValueAgent arrival rate
+        # oracle
+        kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
+        sigma_s=0,
+        fund_vol=5e-5,  # Volatility of fundamental time series (std).
+        megashock_lambda_a=2.77778e-18,
+        megashock_mean=1000,
+        megashock_var=50_000,
+        # 4) Market Maker Agents
+        # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
+        mm_window_size="adaptive",
+        mm_pov=0.025,
+        mm_num_ticks=10,
+        mm_wake_up_freq="60s",
+        mm_min_order_size=1,
+        mm_skew_beta=0,
+        mm_price_skew=4,
+        mm_level_spacing=5,
+        mm_spread_alpha=0.75,
+        mm_backstop_quantity=0,
+        mm_cancel_limit_delay=50,  # 50 nanoseconds
+        # 5) Momentum Agents
+        num_momentum_agents=16,
+        # 6) Self Play Agents,
+        n_self_play_agents=0
 ):
     """
     create the background configuration for rmsc04
@@ -107,7 +107,6 @@ def build_config(
     # market marker derived parameters
     MM_PARAMS = [
         (mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size),
-        (mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size),
     ]
     NUM_MM = len(MM_PARAMS)
     # noise derived parameters
@@ -132,7 +131,7 @@ def build_config(
             "megashock_mean": megashock_mean,
             "megashock_var": megashock_var,
             "random_state": np.random.RandomState(
-                seed=np.random.randint(low=0, high=2**32)
+                seed=np.random.randint(low=0, high=2 ** 32)
             ),
         }
     }
@@ -158,7 +157,7 @@ def build_config(
                 computation_delay=0,
                 stream_history=stream_history_length,
                 random_state=np.random.RandomState(
-                    seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
                 ),
             )
         ]
@@ -178,7 +177,7 @@ def build_config(
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,
                 random_state=np.random.RandomState(
-                    seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
                 ),
             )
             for j in range(agent_count, agent_count + num_noise_agents)
@@ -202,7 +201,7 @@ def build_config(
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,
                 random_state=np.random.RandomState(
-                    seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
                 ),
             )
             for j in range(agent_count, agent_count + num_value_agents)
@@ -233,7 +232,7 @@ def build_config(
                 backstop_quantity=mm_backstop_quantity,
                 log_orders=log_orders,
                 random_state=np.random.RandomState(
-                    seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
                 ),
             )
             for idx, j in enumerate(range(agent_count, agent_count + NUM_MM))
@@ -257,7 +256,7 @@ def build_config(
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,
                 random_state=np.random.RandomState(
-                    seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
                 ),
             )
             for j in range(agent_count, agent_count + num_momentum_agents)
@@ -268,7 +267,7 @@ def build_config(
 
     # extract kernel seed here to reproduce the state of random generator in old version
     random_state_kernel = np.random.RandomState(
-        seed=np.random.randint(low=0, high=2**32, dtype="uint64")
+        seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
     )
     # LATENCY
     latency_model = generate_latency_model(agent_count)

@@ -284,11 +284,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.state_highs: np.ndarray = np.array(
             [
                 2,  # holdings_pct
-                10,  # scaled_mid_price
+                np.finfo(np.float32).max,  # scaled_mid_price
                 1,  # time_pct
                 3,  # diff_pct
                 1,  # imbalance_all
-                1,  # spread
+                5,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
                 10,  # depth (set an upper bound for depth)
@@ -307,7 +307,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # time_pct
                 -3,  # diff_pct
                 -1,  # imbalance_all
-                -1,  # spread
+                -5,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
                 0,  # depth (depth cannot be negative)
@@ -750,11 +750,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         buf = 2
 
         bid_pen = (
-            max(math.exp(max(0.0, (mkt_bid - buf) - self.last_bid_action) - 4.0), 10_000)
+            math.exp(max(0.0, min(9, (mkt_bid - buf) - self.last_bid_action) - 4.0))
             if self.last_bid_action < mkt_bid - buf else 0.0
         )
         ask_pen = (
-            max(math.exp(max(0.0, self.last_ask_action - (mkt_ask + buf)) - 4.0), 10_000)
+            math.exp(max(0.0, min(9, self.last_ask_action - (mkt_ask + buf)) - 4.0))
             if self.last_ask_action > mkt_ask + buf else 0.0
         )
 
@@ -952,7 +952,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "ip_t": self.custom_metrics_tracker.ip_t,
                 "fr_t": self.custom_metrics_tracker.fr_t,
                 "cp_t": self.custom_metrics_tracker.cp_t,
-                "cl_t": self.custom_metrics_tracker.cl_t ,
+                "cl_t": self.custom_metrics_tracker.cl_t,
                 "reward": reward,
                 "spread_ac": self.last_action_1,
                 "reservation_ac": self.last_action_2,
