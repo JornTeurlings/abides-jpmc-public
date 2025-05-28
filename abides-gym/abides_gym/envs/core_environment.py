@@ -223,11 +223,12 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.done = raw_state["done"] or truncated or terminated
 
         if self.done:
-            self.reward += self.raw_state_to_update_reward(
-                deepcopy(raw_state["result"])
-            )
+            self.reward += self.raw_state_to_update_reward(raw_state["result"])
+            print("------ MEMORY CHECKPOINT ------")
+            print(f"[GC] Collected: {gc.collect()}")
+            print(f"[RSS] After GC Memory: {psutil.Process(os.getpid()).memory_info().rss / 1e6:.2f} MB")
 
-        self.info = self.raw_state_to_info(deepcopy(raw_state["result"]))
+        self.info = self.raw_state_to_info(raw_state["result"])
 
         return (self.state, self.reward, self.done, False, self.info)
 
