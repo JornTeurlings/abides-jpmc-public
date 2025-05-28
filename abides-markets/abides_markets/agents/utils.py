@@ -1,5 +1,5 @@
 from collections import deque
-from copy import deepcopy
+from copy import copy
 from typing import Any, Dict, List, Optional, Tuple
 from ..price_level import PriceLevel
 
@@ -55,15 +55,29 @@ def ignore_mkt_data_buffer_decorator(func):
     """
 
     def wrapper_mkt_data_buffer_decorator(self, raw_state):
-        raw_state_copy = deepcopy(raw_state)
-        for i in range(len(raw_state)):
-            raw_state[i]["parsed_mkt_data"] = raw_state_copy[i]["parsed_mkt_data"][-1]  \
-                if isinstance(raw_state_copy[i]["parsed_mkt_data"], deque) else raw_state_copy[i]["parsed_mkt_data"]
-            raw_state[i]["parsed_volume_data"] = raw_state_copy[i][
-                "parsed_volume_data"
-            ][-1] if isinstance(raw_state_copy[i]["parsed_volume_data"], deque) else raw_state_copy[i]["parsed_volume_data"]
-        raw_state2 = list_dict_flip(raw_state)
-        flipped = dict((k, list_dict_flip(v)) for (k, v) in raw_state2.items())
+        trimmed = []
+
+        for s in raw_state:       # ← iterate, don’t index
+            entry = copy(s)       # shallow copy the outer dict
+                                  # (≈ 5-6 pointers, negligible)
+
+            # Replace long deques with their *last* element only
+            pm = entry["parsed_mkt_data"]
+            pv = entry["parsed_volume_data"]
+
+            if isinstance(pm, deque):
+                entry["parsed_mkt_data"] = pm[-1]
+            # else it is already a single snapshot
+
+            if isinstance(pv, deque):
+                entry["parsed_volume_data"] = pv[-1]
+
+            trimmed.append(entry)
+
+        # ---------- whatever the downstream code expected ----------
+        flipped = {k: list_dict_flip(v)
+                   for k, v in list_dict_flip(trimmed).items()}
+
         return func(self, flipped)
 
     return wrapper_mkt_data_buffer_decorator
@@ -82,12 +96,10 @@ def ignore_buffers_decorator(func):
 
     def wrapper_ignore_buffers_decorator(self, raw_state):
         raw_state = raw_state[-1]
-        if len(raw_state["parsed_mkt_data"]) == 0:
-            pass
-        else:
-            raw_state["parsed_mkt_data"] = raw_state["parsed_mkt_data"][-1]
-            if raw_state["parsed_volume_data"]:
-                raw_state["parsed_volume_data"] = raw_state["parsed_volume_data"][-1]
+        if raw_state["parsed_mkt_data"]:
+            raw_state["parsed_mkt_data"] = raw_state["parsed_mkt_data"][-1] if isinstance(raw_state["parsed_mkt_data"], deque) else raw_state["parsed_mkt_data"]
+        if raw_state["parsed_volume_data"]:
+            raw_state["parsed_volume_data"] = raw_state["parsed_volume_data"][-1] if isinstance(raw_state["parsed_volume_data"], deque) else raw_state["parsed_volume_data"]
         return func(self, raw_state)
 
     return wrapper_ignore_buffers_decorator

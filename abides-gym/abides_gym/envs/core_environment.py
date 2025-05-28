@@ -5,7 +5,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import gymnasium as gym
 import numpy as np
 from gymnasium.utils import seeding
-import os
+import os, psutil
+import gc
 import torch as th
 from stable_baselines3 import PPO
 
@@ -28,9 +29,11 @@ class AbidesGymCoreEnv(gym.Env, ABC):
             state_buffer_length: int,
             first_interval: Optional[NanosecondTime] = None,
             gymAgentConstructor=None,
-            saved_models_location=None
+            saved_models_location=None,
+            autoreset=False
     ) -> None:
 
+        self.autoreset = autoreset
         self.background_config_pair: Tuple[
             Callable | List[Callable], Optional[Dict[str, Any]]
         ] = background_config_pair
@@ -156,8 +159,8 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
         # Now we also want to trigger the remaining agents in the environment with their raw_state and information
 
-        state = self.raw_state_to_state(deepcopy(raw_state["result"]))
-        info = self.raw_state_to_info(deepcopy(raw_state["result"]))
+        state = self.raw_state_to_state(raw_state["result"])
+        info = self.raw_state_to_info(raw_state["result"])
 
         # Make sure the SP agents have the correct raw_state at this very instant
         for sp_agent in self_play_agents:
@@ -208,16 +211,16 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         abides_action = self._map_action_space_to_ABIDES_SIMULATOR_SPACE(action)
 
         raw_state = self.kernel.runner((self.gym_agent, abides_action))
-        self.state = self.raw_state_to_state(deepcopy(raw_state["result"]))
+        snap = raw_state
+        self.state = self.raw_state_to_state(snap["result"])
 
         assert self.observation_space.contains(
             self.state
         ), f"INVALID STATE {self.state}"
 
-        self.reward = self.raw_state_to_reward(deepcopy(raw_state["result"]))
-        self.done = raw_state["done"] or self.raw_state_to_done(
-            deepcopy(raw_state["result"])
-        )
+        self.reward = self.raw_state_to_reward(raw_state["result"])
+        truncated, terminated = self.raw_state_to_done(raw_state["result"])
+        self.done = raw_state["done"] or truncated or terminated
 
         if self.done:
             self.reward += self.raw_state_to_update_reward(

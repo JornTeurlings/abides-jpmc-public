@@ -1,9 +1,9 @@
 coloredlogs==15.0.1
-gymnasium==0.28.1
+gymnasium==1.0.0
 numpy==1.24.1
 pandas==2.2.3
 pomegranate==0.15.0
 psutil==6.1.0
-ray[rllib]==2.38.0
+ray[rllib]==2.46.0
 scipy==1.13.1
 tqdm==4.67.0

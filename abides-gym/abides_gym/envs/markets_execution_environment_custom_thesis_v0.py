@@ -124,7 +124,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             domain_randomization_envs: List[str] = [],
             background_config_extra_kvargs: Dict[str, Any] = {},
             saved_models_location: str | None = None,
-            uses_beta: bool = False
+            uses_beta: bool = False,
+            autoreset: bool = True
     ) -> None:
         if background_config == 'random':
             self.background_config = [
@@ -245,7 +246,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             state_buffer_length=self.state_history_length,
             market_data_buffer_length=self.market_data_buffer_length,
             first_interval=self.first_interval,
-            saved_models_location=saved_models_location
+            saved_models_location=saved_models_location,
+            autoreset=autoreset
         )
 
         # Action Space
@@ -256,7 +258,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.action_space = gym.spaces.Box(
             low=np.array([-1, -1], dtype=np.float32),
             high=np.array([1, 1], dtype=np.float32),
-            shape=(self.num_actions,),
             dtype=np.float32
         )
 
@@ -321,7 +322,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.observation_space: gym.Space = gym.spaces.Box(
             self.state_lows,
             self.state_highs,
-            shape=(self.num_state_features, 1),
             dtype=np.float32,
         )
         # initialize previous_marked_to_market to starting_cash (No holding at the beginning of the episode)
@@ -750,11 +750,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         buf = 2
 
         bid_pen = (
-            math.exp(max(0.0, min(9, (mkt_bid - buf) - self.last_bid_action) - 4.0))
+            math.exp(max(0.0, min(5, (mkt_bid - buf) - self.last_bid_action) - 4.0))
             if self.last_bid_action < mkt_bid - buf else 0.0
         )
         ask_pen = (
-            math.exp(max(0.0, min(9, self.last_ask_action - (mkt_ask + buf)) - 4.0))
+            math.exp(max(0.0, min(5, self.last_ask_action - (mkt_ask + buf)) - 4.0))
             if self.last_ask_action > mkt_ask + buf else 0.0
         )
 
@@ -822,17 +822,18 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # Penalized if the agent does not finish the episode (not sure if this works though)
         # if current_time <= time_limit:
         #     update_reward -= 100_000 * (time_limit - current_time) / current_time
+        if current_time >= time_limit:
+            update_reward -= self.terminal_inventory_penalty * abs((holdings ** 3)) / parent_order_size
 
-        update_reward -= self.terminal_inventory_penalty * (holdings ** 3) / self.parent_order_size
-
-        # ------------ NEW: expose as component ---------------------------
-        self.custom_metrics_tracker.reward_components["TI"] = update_reward
+            # ------------ NEW: expose as component ---------------------------
+            self.custom_metrics_tracker.reward_components["TI"] = update_reward
 
         # 4) Normalization
         update_reward = update_reward
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
-        return update_reward
+        # We manually give the rewards through the component normalizer
+        return 0.0
 
     @raw_state_pre_process
     def raw_state_to_done(self, raw_state: Dict[str, Any]) -> bool:
@@ -863,15 +864,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 4)b time_limit
         time_limit = mkt_open + self.first_interval + self.execution_window
 
+        truncated, terminated = False, False
+
         # 5) conditions
         if holdings >= parent_order_size:
-            done = True  # Buy parent order executed
+            terminated = True  # Buy parent order executed
         elif holdings <= - parent_order_size:
-            done = True  # Sell parent order executed
+            terminated = True  # Sell parent order executed
         elif current_time >= time_limit:
-            done = True  # Mkt Close
-        else:
-            done = False
+            truncated = True  # Mkt Close
 
         self.custom_metrics_tracker.executed_quantity = (
             holdings if self.direction == "BUY" else -holdings
@@ -880,7 +881,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 parent_order_size - self.custom_metrics_tracker.executed_quantity
         )
 
-        return done
+        return truncated, terminated
 
     @raw_state_pre_process
     def raw_state_to_info(self, raw_state: Dict[str, Any]) -> Dict[str, Any]:
