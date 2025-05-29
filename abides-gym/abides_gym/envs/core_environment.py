@@ -16,6 +16,10 @@ from abides_core.utils import subdict
 from abides_markets.utils import config_add_agents
 from abides_gym.experimental_agents import SelfPlayAgent
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class AbidesGymCoreEnv(gym.Env, ABC):
     """
@@ -89,6 +93,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
             background_config_state = self.background_config_pair[0](
                 **background_config_args
             )
+        logger.info(f"Current using configuration {background_config_state['name']}")
 
         self_play_agents = []
         agents = []

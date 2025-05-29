@@ -279,6 +279,7 @@ def build_config(
     kernelStopTime = MKT_CLOSE + str_to_ns("1s")
 
     return {
+        "name": "high_liq_many_agents",
         "seed": seed,
         "start_time": kernelStartTime,
         "stop_time": kernelStopTime,
