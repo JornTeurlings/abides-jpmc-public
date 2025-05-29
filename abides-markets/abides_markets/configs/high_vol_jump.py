@@ -31,7 +31,7 @@ from abides_markets.utils import generate_latency_model
 def build_config(
         seed=int(datetime.now().timestamp() * 1_000_000) % (2 ** 32 - 1),
         date="20210205",
-        end_time="10:00:00",
+        end_time="16:00:00",
         stdout_log_level="INFO",
         ticker="ABM",
         starting_cash=10_000_000,  # Cash in this simulator is always in CENTS.
@@ -42,26 +42,26 @@ def build_config(
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent
-        num_noise_agents=1500,
+        num_noise_agents=1300,
         # 3) Value Agents
-        num_value_agents=50,
+        num_value_agents=80,
         r_bar=100_000,  # true mean fundamental value
         kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
         lambda_a=5.7e-12,  # ValueAgent arrival rate
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-4,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=2.77778e-9,
-        megashock_mean=1000,
-        megashock_var=50_000,
+        fund_vol=5e-5,  # Volatility of fundamental time series (std).
+        megashock_lambda_a=2.77778e-13,
+        megashock_mean=2000,
+        megashock_var=10_000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-        num_mm_agents=2,
+        num_mm_agents=1,
         mm_window_size="adaptive",
         mm_pov=0.01,
         mm_num_ticks=10,
-        mm_wake_up_freq="60S",
+        mm_wake_up_freq="60s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
@@ -70,7 +70,7 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=50,
+        num_momentum_agents=10,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):
@@ -251,7 +251,7 @@ def build_config(
                 starting_cash=starting_cash,
                 min_size=1,
                 max_size=10,
-                wake_up_freq=str_to_ns("37s"),
+                wake_up_freq=str_to_ns("60s"),
                 poisson_arrival=True,
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,

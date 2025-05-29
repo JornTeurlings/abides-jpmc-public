@@ -19,7 +19,8 @@ from abides_markets.agents import (
     ValueAgent,
     AdaptiveMarketMakerAgent,
     MomentumAgent,
-    POVExecutionAgent
+    POVExecutionAgent,
+    VWAPExecutionAgent
 )
 from abides_markets.models import OrderSizeModel
 from abides_markets.oracles import SparseMeanRevertingOracle
@@ -44,26 +45,26 @@ def build_config(
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent
-        num_noise_agents=500,
+        num_noise_agents=1300,
         # 3) Value Agents
-        num_value_agents=100,
+        num_value_agents=30,
         r_bar=100_000,  # true mean fundamental value
         kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
         lambda_a=5.7e-12,  # ValueAgent arrival rate
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-5,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=2.77778e-18,
-        megashock_mean=1000,
-        megashock_var=50_000,
+        fund_vol=5e-6,  # Volatility of fundamental time series (std).
+        megashock_lambda_a=2.77778e-20,
+        megashock_mean=1_000,
+        megashock_var=1_000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-        num_mm_agents=3,
+        num_mm_agents=2,
         mm_window_size="adaptive",
         mm_pov=0.025,
         mm_num_ticks=10,
-        mm_wake_up_freq="60S",
+        mm_wake_up_freq="30s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
@@ -72,9 +73,9 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=100,
+        num_momentum_agents=10,
         # Execution Agents,
-        num_execution_agents=30,
+        num_execution_agents=10,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):
@@ -107,10 +108,12 @@ def build_config(
 
     mm_wake_up_freq = str_to_ns(mm_wake_up_freq)
 
+    # 1s = 1e9 ns
+    mm_extra_per = 1e9
     # order size model
     ORDER_SIZE_MODEL = OrderSizeModel()  # Order size model
     # market marker derived parameters
-    MM_PARAMS = [(mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size) for _ in
+    MM_PARAMS = [(mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq + 10 * i * mm_extra_per, mm_min_order_size) for i in
                  range(num_mm_agents)]
     NUM_MM = len(MM_PARAMS)
     # noise derived parameters
@@ -278,11 +281,11 @@ def build_config(
                 symbol=ticker,
                 starting_cash=starting_cash,
                 direction='BUY' if np.random.choice([0, 1]) == 1 else 'SELL',
-                quantity=5000,
-                pov=0.08,
-                start_time=NOISE_MKT_OPEN,
-                end_time=NOISE_MKT_CLOSE,
-                freq="30m",
+                quantity=50000,
+                pov=0.001,
+                start_time=MKT_OPEN,
+                end_time=MKT_CLOSE,
+                freq="1h",
                 lookback_period="30m",
                 random_state=np.random.RandomState(
                     seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
@@ -290,6 +293,27 @@ def build_config(
             )
         for j in range(agent_count, agent_count + num_execution_agents)]
     )
+    agent_types.extend("POVExecutionAgent")
+    agent_count += num_execution_agents
+
+    # agents.extend(
+    #     [
+    #         VWAPExecutionAgent(
+    #             id=j,
+    #             name="VWAP_EXECUTION_AGENT_{}".format(j),
+    #             type="VWAPExecutionAgent",
+    #             symbol=ticker,
+    #             starting_cash=starting_cash,
+    #             direction='BUY' if np.random.choice([0, 1]) == 1 else 'SELL',
+    #             quantity=5000,
+    #             execution_time_horizon=pd.date_range(start=pd.to_datetime(MKT_OPEN), end=pd.to_datetime(MKT_CLOSE), freq="30min"),
+    #             freq="30m",
+    #             volume_profile_path=None
+    #         ) for j in range(agent_count, agent_count + num_execution_agents)
+    #     ]
+    # )
+    # agent_types.extend("VWAPExecutionAgent")
+    # agent_count += num_execution_agents
 
     # extract kernel seed here to reproduce the state of random generator in old version
     random_state_kernel = np.random.RandomState(

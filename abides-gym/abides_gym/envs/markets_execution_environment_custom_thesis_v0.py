@@ -7,6 +7,9 @@ from abc import ABC
 import gymnasium as gym
 import numpy as np
 
+import warnings
+warnings.filterwarnings("ignore", module='abides_markets')
+
 import abides_markets.agents.utils as markets_agent_utils
 from abides_core import NanosecondTime
 from abides_core.utils import str_to_ns
@@ -113,7 +116,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             market_data_buffer_length: int = 5,
             first_interval: str = "00:00:30",
             parent_order_size: int = 1200,
-            scale_price: int = 100000,
+            scale_price: int = 100_000,
             execution_window: str = "00:10:00",
             direction: str = "BUY",
             not_enough_reward_update: int = -100,
@@ -170,6 +173,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "high_liq_comp",
             "high_liq_many_agents",
             "high_vol_jump",
+            "low_liq",
             "stable_mm",
             "structural_intelligent",
             "random",
@@ -354,6 +358,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.frt_importance = tuning_params.get('frt_importance', 1)
 
         # Some default values for initialization
+        self.last_mid_price = scale_price
         self.last_spread = 0
         self.last_bid_action = 0
         self.last_ask_action = 0
@@ -545,9 +550,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             for (a, mp) in zip(asks, mid_prices)
         ]
 
-        self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
-        # Scale mid_price to ~ 1 range if needed
-        scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around 1
+        # need to verify they exist
+        if bids and asks:
+            self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
+            # Scale mid_price to ~ 1 range if needed
+            scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around 1
 
         # Spread as fraction of mid
         spreads = np.array(best_asks) - np.array(best_bids)

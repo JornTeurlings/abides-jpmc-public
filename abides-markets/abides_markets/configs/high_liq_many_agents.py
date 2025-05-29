@@ -44,24 +44,24 @@ def build_config(
         # 2) Noise Agent
         num_noise_agents=2000,
         # 3) Value Agents
-        num_value_agents=100,
+        num_value_agents=130,
         r_bar=100_000,  # true mean fundamental value
         kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
         lambda_a=5.7e-12,  # ValueAgent arrival rate
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-3,  # Volatility of fundamental time series (std).
+        fund_vol=1e-5,  # Volatility of fundamental time series (std).
         megashock_lambda_a=2.77778e-18,
         megashock_mean=1000,
-        megashock_var=50_000,
+        megashock_var=2000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-        num_mm_agents=2,
+        num_mm_agents=1,
         mm_window_size="adaptive",
         mm_pov=0.025,
         mm_num_ticks=10,
-        mm_wake_up_freq="60S",
+        mm_wake_up_freq="60s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
@@ -70,7 +70,7 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=100,
+        num_momentum_agents=20,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):
@@ -106,8 +106,8 @@ def build_config(
     # order size model
     ORDER_SIZE_MODEL = OrderSizeModel()  # Order size model
     # market marker derived parameters
-    MM_PARAMS = [(mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size) for _ in
-                 range(num_mm_agents)]
+    MM_PARAMS = [(mm_window_size, mm_pov, mm_num_ticks, mm_wake_up_freq, mm_min_order_size) for _
+                 in range(num_mm_agents)]
     NUM_MM = len(MM_PARAMS)
     # noise derived parameters
     SIGMA_N = r_bar / 100  # observation noise variance

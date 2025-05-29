@@ -2,6 +2,8 @@ import sys
 import warnings
 import pandas as pd
 from abides_markets.messages.orderbook import OrderExecutedMsg, OrderAcceptedMsg
+from abides_markets.messages.query import QueryTransactedVolMsg, QueryTransactedVolResponseMsg
+from abides_markets.orders import Side
 
 from ..trading_agent import TradingAgent
 from ..utils import log_print
@@ -42,21 +44,19 @@ class POVExecutionAgent(TradingAgent):
         can_trade = super().wakeup(currentTime)
         if not can_trade:
             return
-        if self.trade and self.rem_quantity > 0 and self.start_time < currentTime < self.end_time:
+        if self.trade and self.rem_quantity > 0 and self.start_time <= currentTime < self.end_time:
             self.cancel_all_orders()
             self.get_current_spread(self.symbol, depth=sys.maxsize)
             self.get_transacted_volume(self.symbol, lookback_period=self.look_back_period)
             self.state = 'AWAITING_TRANSACTED_VOLUME'
+            delta_time = self.get_wake_frequency()
+            self.set_wakeup(currentTime + int(round(delta_time)))
 
     def get_wake_frequency(self):
-        return pd.Timedelta(self.freq).seconds
+        return pd.Timedelta(self.freq).seconds * 1e9
 
     def receive_message(self, currentTime, sender_id, msg):
         super().receive_message(currentTime, sender_id, msg)
-        if isinstance(msg, OrderExecutedMsg):
-            self.handleOrderExecution(currentTime, msg)
-        elif isinstance(msg, OrderAcceptedMsg):
-            self.handleOrderAcceptance(currentTime, msg)
 
         if currentTime > self.end_time:
             log_print(
@@ -66,33 +66,34 @@ class POVExecutionAgent(TradingAgent):
 
         if self.rem_quantity > 0 and \
                 self.state == 'AWAITING_TRANSACTED_VOLUME' \
-                and msg.body['msg'] == 'QUERY_TRANSACTED_VOLUME' \
+                and isinstance(msg, QueryTransactedVolResponseMsg) \
                 and self.transacted_volume[self.symbol] is not None \
                 and currentTime > self.start_time:
-            qty = round(self.pov * self.transacted_volume[self.symbol])
+            qty = round(self.pov * self.transacted_volume[self.symbol][0 if self.direction == 'BUY' else 1])
             self.cancel_all_orders()
-            self.place_market_order(self.symbol, qty, self.direction == 'BUY')
+            self.place_market_order(self.symbol, qty, side=Side.BID if self.direction == 'BUY' else Side.ASK)
             log_print(
                 f'[---- {self.name} - {currentTime} ----]: TOTAL TRANSACTED VOLUME IN THE LAST {self.look_back_period} = {self.transacted_volume[self.symbol]}')
             log_print(f'[---- {self.name} - {currentTime} ----]: MARKET ORDER PLACED - {qty}')
+            self.state = "AWAITING_WAKEUP"
 
-    def handleOrderAcceptance(self, currentTime, msg):
-        accepted_order = msg.order
+    def order_accepted(self, order):
+        accepted_order = order
         self.accepted_orders.append(accepted_order)
         accepted_qty = sum(accepted_order.quantity for accepted_order in self.accepted_orders)
-        log_print(f'[---- {self.name} - {currentTime} ----]: ACCEPTED QUANTITY : {accepted_qty}')
+        log_print(f'[---- {self.name} ----]: ACCEPTED QUANTITY : {accepted_qty}')
 
-    def handleOrderExecution(self, currentTime, msg):
-        executed_order = msg.order
+    def order_executed(self, order):
+        executed_order = order
         self.executed_orders.append(executed_order)
         executed_qty = sum(executed_order.quantity for executed_order in self.executed_orders)
         self.rem_quantity = self.quantity - executed_qty
         log_print(
-            f'[---- {self.name} - {currentTime} ----]: LIMIT ORDER EXECUTED - {executed_order.quantity} @ {executed_order.fill_price}')
-        log_print(f'[---- {self.name} - {currentTime} ----]: EXECUTED QUANTITY: {executed_qty}')
-        log_print(f'[---- {self.name} - {currentTime} ----]: REMAINING QUANTITY (NOT EXECUTED): {self.rem_quantity}')
+            f'[---- {self.name} ----]: LIMIT ORDER EXECUTED - {executed_order.quantity} @ {executed_order.fill_price}')
+        log_print(f'[---- {self.name} ----]: EXECUTED QUANTITY: {executed_qty}')
+        log_print(f'[---- {self.name} ----]: REMAINING QUANTITY (NOT EXECUTED): {self.rem_quantity}')
         log_print(
-            f'[---- {self.name} - {currentTime} ----]: % EXECUTED: {round((1 - self.rem_quantity / self.quantity) * 100, 2)} \n')
+            f'[---- {self.name} ----]: % EXECUTED: {round((1 - self.rem_quantity / self.quantity) * 100, 2)} \n')
 
     def cancel_all_orders(self):
         for _, order in self.orders.items():

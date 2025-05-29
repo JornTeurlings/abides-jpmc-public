@@ -18,6 +18,7 @@ from abides_markets.agents import (
     ValueAgent,
     AdaptiveMarketMakerAgent,
     MomentumAgent,
+    POVExecutionAgent
 )
 from abides_markets.models import OrderSizeModel
 from abides_markets.oracles import SparseMeanRevertingOracle
@@ -52,16 +53,16 @@ def build_config(
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
         fund_vol=5e-6,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=2.77778e-18,
+        megashock_lambda_a=2.77778e-14,
         megashock_mean=1000,
-        megashock_var=50_000,
+        megashock_var=5000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
-        num_mm_agents=0,
+        num_mm_agents=1,
         mm_window_size="adaptive",
         mm_pov=0.025,
         mm_num_ticks=10,
-        mm_wake_up_freq="60S",
+        mm_wake_up_freq="30s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
@@ -70,9 +71,10 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=0,
+        num_momentum_agents=6,
         # 6) Self Play Agents
-        n_self_play_agents=0
+        n_self_play_agents=0,
+        n_execution_agents=2
 ):
     """
     create the background configuration for low_liq
@@ -264,6 +266,30 @@ def build_config(
     )
     agent_count += num_momentum_agents
     agent_types.extend("MomentumAgent")
+
+    agents.extend(
+        [
+            POVExecutionAgent(
+                id=j,
+                name="EXECUTION_AGENT_{}".format(j),
+                type="POVExecutionAgent",
+                symbol=ticker,
+                starting_cash=starting_cash,
+                direction='BUY' if np.random.choice([0, 1]) == 1 else 'SELL',
+                quantity=50000,
+                pov=0.001,
+                start_time=MKT_OPEN,
+                end_time=MKT_CLOSE,
+                freq="1h",
+                lookback_period="30m",
+                random_state=np.random.RandomState(
+                    seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
+                )
+            )
+        for j in range(agent_count, agent_count + n_execution_agents)]
+    )
+    agent_types.extend("POVExecutionAgent")
+    agent_count += n_execution_agents
 
     # extract kernel seed here to reproduce the state of random generator in old version
     random_state_kernel = np.random.RandomState(
