@@ -569,6 +569,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         padded_returns = np.zeros(self.state_history_length - 1, dtype=np.float32)
         last_k = len(log_returns)
         padded_returns[-last_k:] = log_returns if last_k > 0 else padded_returns
+        padded_returns = np.clip(padded_returns, -10, 10).tolist
 
         # 8) Short term vol from log returns
         # e.g. std of the last 10 log returns
