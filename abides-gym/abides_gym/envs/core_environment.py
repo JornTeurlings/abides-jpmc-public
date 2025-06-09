@@ -108,24 +108,25 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 # Get the models in the directory
                 options = os.listdir(models_dir)
                 # Choose any of the models
-                model_chosen = np.random.choice(options)
+                if options:
+                    model_chosen = np.random.choice(options)
 
-                model = PPO.load(models_dir + '/' + model_chosen)
-                # 2. Make sure the correct configuration is given along
-                # 3. Make sure the model is unzipped and given as is to the network as a module
-                # 4. Continue executiing
+                    model = PPO.load(models_dir + '/' + model_chosen)
+                    # 2. Make sure the correct configuration is given along
+                    # 3. Make sure the model is unzipped and given as is to the network as a module
+                    # 4. Continue executiing
 
-                new_sp_agent = SelfPlayAgent(
-                    n + i,
-                    "ABM",
-                    first_interval=self.first_interval,
-                    wakeup_interval_generator=self.wakeup_interval_generator,
-                    state_buffer_length=self.state_buffer_length,
-                    nn_model=model,
-                    environment_configuration=self.environment_configuration,
-                    **self.extra_gym_agent_kvargs
-                )
-                self_play_agents.append(new_sp_agent)
+                    new_sp_agent = SelfPlayAgent(
+                        n + i,
+                        "ABM",
+                        first_interval=self.first_interval,
+                        wakeup_interval_generator=self.wakeup_interval_generator,
+                        state_buffer_length=self.state_buffer_length,
+                        nn_model=model,
+                        environment_configuration=self.environment_configuration,
+                        **self.extra_gym_agent_kvargs
+                    )
+                    self_play_agents.append(new_sp_agent)
         # instantiate gym agent and add it to config and gym object
         nextid = len(background_config_state["agents"]) + background_config_args.get('n_self_play_agents', 0)
         gym_agent = self.gymAgentConstructor(
