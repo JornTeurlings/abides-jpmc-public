@@ -109,6 +109,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 options = os.listdir(models_dir)
                 # Choose any of the models
                 if options:
+
                     model_chosen = np.random.choice(options)
 
                     model = PPO.load(models_dir + '/' + model_chosen)
@@ -128,7 +129,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                     )
                     self_play_agents.append(new_sp_agent)
         # instantiate gym agent and add it to config and gym object
-        nextid = len(background_config_state["agents"]) + background_config_args.get('n_self_play_agents', 0)
+        nextid = len(background_config_state["agents"]) + len(self_play_agents)
         gym_agent = self.gymAgentConstructor(
             nextid,
             "ABM",
