@@ -42,7 +42,7 @@ def build_config(
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent
-        num_noise_agents=500,
+        num_noise_agents=1000,
         # 3) Value Agents
         num_value_agents=250,
         r_bar=100_000,  # true mean fundamental value

@@ -44,7 +44,7 @@ def build_config(
         # 2) Noise Agent
         num_noise_agents=900,
         # 3) Value Agents
-        num_value_agents=50,
+        num_value_agents=80,
         r_bar=100_000,  # true mean fundamental value
         kappa=1.67e-15,  # Value Agents appraisal of mean-reversion
         lambda_a=5.7e-12,  # ValueAgent arrival rate
