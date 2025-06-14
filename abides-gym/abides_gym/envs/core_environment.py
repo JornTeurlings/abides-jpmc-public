@@ -106,7 +106,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 # Get the location of the models
                 models_dir = self.saved_models_location
                 # Get the models in the directory
-                options = os.listdir(models_dir)
+                options = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
                 # Choose any of the models
                 if options:
 
