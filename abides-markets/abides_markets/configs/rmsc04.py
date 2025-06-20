@@ -51,7 +51,7 @@ def build_config(
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=7.5e-4,  # Volatility of fundamental time series (std).
+        fund_vol=8e-6,  # Volatility of fundamental time series (std).
         megashock_lambda_a=2.77778e-18,
         megashock_mean=1000,
         megashock_var=10_000,
