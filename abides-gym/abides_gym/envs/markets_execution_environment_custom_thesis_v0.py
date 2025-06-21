@@ -640,7 +640,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_bids = bids[0]
         self.previous_asks = asks[0]
         self.previous_depth = depth
-        self.last_spread = spreads[-1]
+        self.last_spread = spread
 
         # 12) Build final state vector
         # Keep your enumerated structure, but use dimensionless/log scaled features
