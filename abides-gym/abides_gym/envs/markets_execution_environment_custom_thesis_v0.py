@@ -294,7 +294,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 1,  # time_pct
                 3,  # diff_pct
                 1,  # imbalance_all
-                np.finfo(np.float32).max,  # spread
+                1,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
                 10,  # depth (set an upper bound for depth)
@@ -313,7 +313,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # time_pct
                 -3,  # diff_pct
                 -1,  # imbalance_all
-                np.finfo(np.float32).min,  # spread
+                0,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
                 0,  # depth (depth cannot be negative)
@@ -561,8 +561,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         scaled_mid_price = max(0, min(scaled_mid_price, 10))
         # Spread as fraction of mid
-        spreads = np.array(best_asks) - np.array(best_bids)
-        spread = spreads[-1] / self.scale_price  # dimensionless relative to mid_price < 1/2
+        spread = (best_asks[-1] - best_bids[-1]) / self.last_mid_price
+        spread = np.clip(spread, 0.0, 1.0)  # Optional but recommended
 
         # 7) Log returns
         # Replace raw differences with log(m_i / m_(i-1))
