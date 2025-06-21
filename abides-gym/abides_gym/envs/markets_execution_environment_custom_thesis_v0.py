@@ -294,7 +294,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 1,  # time_pct
                 3,  # diff_pct
                 1,  # imbalance_all
-                5,  # spread
+                np.finfo(np.float32).max,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
                 10,  # depth (set an upper bound for depth)
@@ -313,7 +313,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # time_pct
                 -3,  # diff_pct
                 -1,  # imbalance_all
-                -5,  # spread
+                np.finfo(np.float32).min,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
                 0,  # depth (depth cannot be negative)
