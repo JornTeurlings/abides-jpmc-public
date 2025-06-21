@@ -292,7 +292,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 np.finfo(np.float32).max,  # scaled_mid_price
                 1,  # time_pct
                 3,  # diff_pct
-                1,  # imbalance_all
+                np.finfo(np.float32).max,  # imbalance_all
                 5,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
@@ -311,7 +311,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # scaled_mid_price
                 0,  # time_pct
                 -3,  # diff_pct
-                -1,  # imbalance_all
+                np.finfo(np.float32).min,  # imbalance_all
                 -5,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
