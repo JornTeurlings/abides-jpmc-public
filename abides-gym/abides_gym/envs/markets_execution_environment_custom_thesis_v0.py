@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 
 import warnings
+
 warnings.filterwarnings("ignore", module='abides_markets')
 
 import abides_markets.agents.utils as markets_agent_utils
@@ -292,7 +293,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 np.finfo(np.float32).max,  # scaled_mid_price
                 1,  # time_pct
                 3,  # diff_pct
-                np.finfo(np.float32).max,  # imbalance_all
+                1,  # imbalance_all
                 5,  # spread
                 1,  # short_term_vol
                 1,  # top_of_book_liquidity
@@ -311,7 +312,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 0,  # scaled_mid_price
                 0,  # time_pct
                 -3,  # diff_pct
-                np.finfo(np.float32).min,  # imbalance_all
+                -1,  # imbalance_all
                 -5,  # spread
                 0,  # short_term_vol
                 0,  # top_of_book_liquidity
@@ -531,7 +532,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             markets_agent_utils.get_imbalance(b, a, depth=None)
             for (b, a) in zip(bids, asks)
         ]
-        imbalance_all = imbalances_all[-1]  # typically in [-1,1]
+        imbalance_all = max(min(imbalances_all[-1], 1), -1)  # typically in [-1,1]
 
         # 5) Mid Prices + Price Impact
         mid_prices = [
@@ -555,7 +556,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
             # Scale mid_price to ~ 1 range if needed
             scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around 1
+        else:
+            scaled_mid_price = self.last_mid_price / self.scale_price
 
+        scaled_mid_price = max(0, min(scaled_mid_price, 10))
         # Spread as fraction of mid
         spreads = np.array(best_asks) - np.array(best_bids)
         spread = spreads[-1] / self.scale_price  # dimensionless relative to mid_price < 1/2
