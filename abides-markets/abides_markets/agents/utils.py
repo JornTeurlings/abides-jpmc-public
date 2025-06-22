@@ -66,11 +66,11 @@ def ignore_mkt_data_buffer_decorator(func):
             pv = entry["parsed_volume_data"]
 
             if isinstance(pm, deque):
-                entry["parsed_mkt_data"] = pm[-1]
+                entry["parsed_mkt_data"] = pm[-1] if len(pm) > 0 else {}
             # else it is already a single snapshot
 
             if isinstance(pv, deque):
-                entry["parsed_volume_data"] = pv[-1]
+                entry["parsed_volume_data"] = pv[-1] if len(pv) > 0 else {}
 
             trimmed.append(entry)
 
