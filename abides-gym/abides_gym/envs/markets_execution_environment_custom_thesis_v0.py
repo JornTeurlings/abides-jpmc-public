@@ -553,14 +553,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             markets_agent_utils.get_imbalance(b, a, depth=None)
             for (b, a) in zip(bids, asks)
         ]
-        imbalance_all = max(min(imbalances_all[-1], 1), -1)  # typically in [-1,1]
+        imbalance_all = max(min(imbalances_all[-1] if len(imbalances_all) > 0 else 0, 1), -1)  # typically in [-1,1]
 
         # 5) Mid Prices + Price Impact
         mid_prices = [
             markets_agent_utils.get_mid_price(bid, ask, lt)
             for (bid, ask, lt) in zip(bids, asks, last_transactions)
         ]
-        mid_price = mid_prices[-1]  # current mid
 
         # 6) Best bids / asks
         best_bids = [
