@@ -507,8 +507,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         if len(bids) == 0 or len(asks) == 0:
             print(f'Either bids or asks are empty at current step: {self.step_index}')
 
-        bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1]
-        ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1]
+        bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1] if isinstance(raw_state["parsed_volume_data"]["bid_volume"], list) \
+            else raw_state["parsed_volume_data"]["bid_volume"]
+        ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1] if isinstance(raw_state["parsed_volume_data"]["ask_volume"], list) \
+            else raw_state["parsed_volume_data"]["ask_volume"]
 
         # 1) Holdings (scaled)
         holdings = raw_state["internal_data"]["holdings"]
