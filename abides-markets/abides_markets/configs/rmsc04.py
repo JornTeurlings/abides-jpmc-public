@@ -52,7 +52,7 @@ def build_config(
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
         fund_vol=8e-6,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=2.77778e-18,
+        megashock_lambda_a=1e-18,
         megashock_mean=1000,
         megashock_var=10_000,
         # 4) Market Maker Agents
@@ -251,7 +251,7 @@ def build_config(
                 starting_cash=starting_cash,
                 min_size=1,
                 max_size=10,
-                wake_up_freq=str_to_ns("60s"),
+                wake_up_freq=str_to_ns("37s"),
                 poisson_arrival=True,
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,

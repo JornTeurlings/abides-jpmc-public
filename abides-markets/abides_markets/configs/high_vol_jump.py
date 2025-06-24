@@ -51,7 +51,7 @@ def build_config(
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=2e-5,  # Volatility of fundamental time series (std).
+        fund_vol=1.5e-5,  # Volatility of fundamental time series (std).
         megashock_lambda_a=5e-18,
         megashock_mean=2000,
         megashock_var=10_000,
@@ -70,7 +70,7 @@ def build_config(
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=10,
+        num_momentum_agents=8,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):
@@ -251,7 +251,7 @@ def build_config(
                 starting_cash=starting_cash,
                 min_size=1,
                 max_size=10,
-                wake_up_freq=str_to_ns("60s"),
+                wake_up_freq=str_to_ns("37s"),
                 poisson_arrival=True,
                 log_orders=log_orders,
                 order_size_model=ORDER_SIZE_MODEL,
