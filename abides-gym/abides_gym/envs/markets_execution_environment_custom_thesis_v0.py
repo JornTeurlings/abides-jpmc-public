@@ -687,41 +687,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         return computed_state.reshape(self.num_state_features, 1)
 
-    def compute_mid_price_ask_bid(self, raw_state: Dict[str, Any]):
-        """
-        Compute the mid_price, best_ask and best_bid
-        Args:
-            raw_state:
-
-        Returns:    (mid_price, bid, ask)
-
-        """
-        bids = raw_state["parsed_mkt_data"].get("bids", [])
-        asks = raw_state["parsed_mkt_data"].get("bids", [])
-        last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
-
-        mid_prices = [
-            markets_agent_utils.get_mid_price(bid, ask, lt)
-            for (bid, ask, lt) in zip(bids, asks, last_transactions)
-        ]
-        mid_price = mid_prices[-1]  # current mid
-
-        # 6) Best bids / asks
-        best_bids = [
-            b[0][0] if len(b) > 0 else mp
-            for (b, mp) in zip(bids, mid_prices)
-        ]
-        best_asks = [
-            a[0][0] if len(a) > 0 else mp
-            for (a, mp) in zip(asks, mid_prices)
-        ]
-
-        best_bid = best_bids[-1]
-        best_ask = best_asks[-1]
-        mid_price = (best_bid + best_ask) / 2
-
-        return mid_price, best_bid, best_ask
-
     #
     # ────────────────────────────────────────────────────────────────────────────────
     #  Reward helpers
