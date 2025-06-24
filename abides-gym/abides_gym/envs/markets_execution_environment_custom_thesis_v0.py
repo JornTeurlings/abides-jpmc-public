@@ -561,7 +561,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         scaled_mid_price = max(0, min(scaled_mid_price, 10))
         # Spread as fraction of mid
-        spread = (best_asks[-1] - best_bids[-1]) / self.last_mid_price
+        if bids and asks:
+            if self.last_mid_price > 0:
+                spread = (best_asks[-1] - best_bids[-1]) / self.last_mid_price
+            else:
+                spread = (best_asks[-1] - best_bids[-1]) / self.scale_price
+        else:
+            spread = self.last_spread
         spread = np.clip(spread, 0.0, 1.0)  # Optional but recommended
 
         # 7) Log returns
