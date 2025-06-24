@@ -20,6 +20,21 @@ from .markets_environment import AbidesGymMarketsEnv
 from abides_markets.orders import LimitOrder
 
 
+def safe_get(dct, keys, default=None):
+    """Recursively get a nested dictionary key with fallback."""
+    for key in keys:
+        if isinstance(dct, dict) and key in dct:
+            dct = dct[key]
+        else:
+            return default
+    return dct
+
+
+def safe_list_last(item, default=0.0):
+    """Return last item of list or fallback."""
+    return item[-1] if isinstance(item, list) and item else item if isinstance(item, (int, float)) else default
+
+
 class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
     """
     Execution V0 environment. It defines one of the ABIDES-Gym-markets environment.
@@ -501,24 +516,28 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # ---------------------------
         # 0) Preliminary
         # ---------------------------
-        bids = raw_state["parsed_mkt_data"].get("bids", [])
-        asks = raw_state["parsed_mkt_data"].get("asks", [])
-        last_transactions = raw_state["parsed_mkt_data"].get("last_transaction", [])
-        if len(bids) == 0 or len(asks) == 0:
+        # --- Market Data ---
+        bids = safe_get(raw_state, ["parsed_mkt_data", "bids"], [])
+        asks = safe_get(raw_state, ["parsed_mkt_data", "asks"], [])
+        last_transactions = safe_get(raw_state, ["parsed_mkt_data", "last_transaction"], [])
+
+        if not bids or not asks:
             print(f'Either bids or asks are empty at current step: {self.step_index}')
 
-        bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1] if isinstance(raw_state["parsed_volume_data"]["bid_volume"], list) \
-            else raw_state["parsed_volume_data"]["bid_volume"]
-        ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1] if isinstance(raw_state["parsed_volume_data"]["ask_volume"], list) \
-            else raw_state["parsed_volume_data"]["ask_volume"]
+        # --- Volume Data ---
+        bid_volume_raw = safe_get(raw_state, ["parsed_volume_data", "bid_volume"], 0.0)
+        ask_volume_raw = safe_get(raw_state, ["parsed_volume_data", "ask_volume"], 0.0)
 
-        # 1) Holdings (scaled)
-        holdings = raw_state["internal_data"]["holdings"]
-        holdings_pct = holdings[-1] / (self.parent_order_size)  # dimensionless in [-1,1]
+        bid_volume = safe_list_last(bid_volume_raw)
+        ask_volume = safe_list_last(ask_volume_raw)
 
-        # 2) Timing
-        mkt_open = raw_state["internal_data"]["mkt_open"][-1]
-        current_time = raw_state["internal_data"]["current_time"][-1]
+        # --- Internal State: Holdings and Timing ---
+        holdings = safe_get(raw_state, ["internal_data", "holdings"], [0.0])
+        holdings_pct = safe_list_last(holdings) / self.parent_order_size
+
+        mkt_open = safe_list_last(safe_get(raw_state, ["internal_data", "mkt_open"], [0.0]))
+        current_time = safe_list_last(safe_get(raw_state, ["internal_data", "current_time"], [0.0]))
+
         time_from_parent_arrival = current_time - mkt_open - self.first_interval
         assert (current_time >= mkt_open + self.first_interval), (
             "Agent has woken up earlier than its first interval"
@@ -564,10 +583,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         scaled_mid_price = max(0, min(scaled_mid_price, 10))
         # Spread as fraction of mid
         if bids and asks:
-            if self.last_mid_price > 0:
-                spread = (best_asks[-1] - best_bids[-1]) / self.last_mid_price
-            else:
-                spread = (best_asks[-1] - best_bids[-1]) / self.scale_price
+            spread = (best_asks[-1] - best_bids[-1]) / (
+                self.last_mid_price if self.last_mid_price > 0 else self.scale_price)
         else:
             spread = self.last_spread
         spread = np.clip(spread, 0.0, 1.0)  # Optional but recommended
@@ -680,8 +697,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         Returns:    (mid_price, bid, ask)
 
         """
-        bids = raw_state["parsed_mkt_data"]["bids"]
-        asks = raw_state["parsed_mkt_data"]["asks"]
+        bids = raw_state["parsed_mkt_data"].get("bids", [])
+        asks = raw_state["parsed_mkt_data"].get("bids", [])
         last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
 
         mid_prices = [
@@ -926,11 +943,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         last_transaction = raw_state["parsed_mkt_data"]["last_transaction"]
 
         # 2) Last Known best bid
-        bids = raw_state["parsed_mkt_data"]["bids"]
+        bids = raw_state["parsed_mkt_data"].get("bids", [])
         best_bid = bids[0][0] if len(bids) > 0 else last_transaction
 
         # 3) Last Known best ask
-        asks = raw_state["parsed_mkt_data"]["asks"]
+        asks = raw_state["parsed_mkt_data"].get("asks", [])
         best_ask = asks[0][0] if len(asks) > 0 else last_transaction
 
         # 4) Current Time
@@ -940,8 +957,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         holdings = raw_state["internal_data"]["holdings"]
 
         # 6) Volume on both sides
-        volume_bid = raw_state["parsed_volume_data"]["bid_volume"]
-        volume_ask = raw_state["parsed_volume_data"]["ask_volume"]
+        volume_bid = safe_get(raw_state, ["parsed_volume_data", "bid_volume"], 0.0)
+        volume_ask = safe_get(raw_state, ["parsed_volume_data", "ask_volume"], 0.0)
         total_volume = volume_ask + volume_bid
 
         # 7) Cash
