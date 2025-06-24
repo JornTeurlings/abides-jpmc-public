@@ -51,26 +51,26 @@ def build_config(
         # oracle
         kappa_oracle=1.67e-16,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=1.5e-5,  # Volatility of fundamental time series (std).
-        megashock_lambda_a=5e-18,
-        megashock_mean=2000,
+        fund_vol=3e-5,  # Volatility of fundamental time series (std).
+        megashock_lambda_a=5e-17,
+        megashock_mean=1000,
         megashock_var=10_000,
         # 4) Market Maker Agents
         # each elem of mm_params is tuple (window_size, pov, num_ticks, wake_up_freq, min_order_size)
         num_mm_agents=1,
         mm_window_size="adaptive",
-        mm_pov=0.01,
+        mm_pov=0.025,
         mm_num_ticks=10,
         mm_wake_up_freq="60s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
         mm_level_spacing=5,
-        mm_spread_alpha=1.2,
+        mm_spread_alpha=0.75,
         mm_backstop_quantity=0,
         mm_cancel_limit_delay=50,  # 50 nanoseconds
         # 5) Momentum Agents
-        num_momentum_agents=8,
+        num_momentum_agents=12,
         # 6) Self Play Agents
         n_self_play_agents=0
 ):

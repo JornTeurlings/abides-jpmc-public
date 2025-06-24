@@ -31,7 +31,7 @@ from abides_markets.utils import generate_latency_model
 def build_config(
         seed=int(datetime.now().timestamp() * 1_000_000) % (2 ** 32 - 1),
         date="20210205",
-        end_time="10:00:00",
+        end_time="16:00:00",
         stdout_log_level="INFO",
         ticker="ABM",
         starting_cash=10_000_000,  # Cash in this simulator is always in CENTS.
@@ -51,7 +51,7 @@ def build_config(
         # oracle
         kappa_oracle=1.67e-8,  # Mean-reversion of fundamental time series.
         sigma_s=0,
-        fund_vol=5e-6,  # Volatility of fundamental time series (std).
+        fund_vol=7e-6,  # Volatility of fundamental time series (std).
         megashock_lambda_a=2e-19,
         megashock_mean=1000,
         megashock_var=2000,
