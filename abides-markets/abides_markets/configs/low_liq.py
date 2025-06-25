@@ -39,7 +39,7 @@ def build_config(
         log_orders=True,  # if True log everything
         # 1) Exchange Agent
         book_logging=True,
-        book_log_depth=3,
+        book_log_depth=10,
         stream_history_length=500,
         exchange_log_orders=None,
         # 2) Noise Agent

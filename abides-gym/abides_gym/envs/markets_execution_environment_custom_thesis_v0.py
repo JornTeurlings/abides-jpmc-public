@@ -610,7 +610,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             short_term_vol = np.std(log_returns[-10:])
         else:
             short_term_vol = 0.0
-        # (Optional) Clip outliers if needed
+
         clip_vol = 1
         short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
 
@@ -907,30 +907,47 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # Agent cannot use this info for taking decision
         # only for debugging
 
+        parsed_mkt_data = raw_state.get("parsed_mkt_data", {})
+        internal_data = raw_state.get("internal_data", {})
+        parsed_volume_data = raw_state.get("parsed_volume_data", {})
+
         # 1) Last Known Market Transaction Price
-        last_transaction = raw_state["parsed_mkt_data"]["last_transaction"]
+        last_transaction_raw = safe_get(parsed_mkt_data, ["last_transaction"], 1.0)
+        last_transaction = safe_list_last(last_transaction_raw, 1.0)
 
         # 2) Last Known best bid
-        bids = raw_state["parsed_mkt_data"].get("bids", [])
-        best_bid = bids[0][0] if len(bids) > 0 else last_transaction
+        bids = safe_get(parsed_mkt_data, ["bids"], [])
+        best_bid = (
+            bids[0][0] if isinstance(bids, list) and bids and isinstance(bids[0], list) and bids[
+                0] else last_transaction
+        )
 
         # 3) Last Known best ask
-        asks = raw_state["parsed_mkt_data"].get("asks", [])
-        best_ask = asks[0][0] if len(asks) > 0 else last_transaction
+        asks = safe_get(parsed_mkt_data, ["asks"], [])
+        best_ask = (
+            asks[0][0] if isinstance(asks, list) and asks and isinstance(asks[0], list) and asks[
+                0] else last_transaction
+        )
 
         # 4) Current Time
-        current_time = raw_state["internal_data"]["current_time"]
+        current_time_raw = safe_get(internal_data, ["current_time"], [0.0])
+        current_time = safe_list_last(current_time_raw, 0.0)
 
         # 5) Holdings
-        holdings = raw_state["internal_data"]["holdings"]
+        holdings_raw = safe_get(internal_data, ["holdings"], [0.0])
+        holdings = safe_list_last(holdings_raw, 0.0)
 
         # 6) Volume on both sides
-        volume_bid = safe_get(raw_state, ["parsed_volume_data", "bid_volume"], 0.0)
-        volume_ask = safe_get(raw_state, ["parsed_volume_data", "ask_volume"], 0.0)
-        total_volume = volume_ask + volume_bid
+        volume_bid_raw = safe_get(parsed_volume_data, ["bid_volume"], 0.0)
+        volume_ask_raw = safe_get(parsed_volume_data, ["ask_volume"], 0.0)
+
+        volume_bid = safe_list_last(volume_bid_raw, 0.0)
+        volume_ask = safe_list_last(volume_ask_raw, 0.0)
+        total_volume = volume_bid + volume_ask
 
         # 7) Cash
-        cash = raw_state["internal_data"]["cash"]
+        cash_raw = safe_get(internal_data, ["cash"], [0.0])
+        cash = safe_list_last(cash_raw, 0.0)
 
         reward = self.custom_metrics_tracker.reward
         reserv = None
