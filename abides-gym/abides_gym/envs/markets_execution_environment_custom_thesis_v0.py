@@ -615,30 +615,34 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
 
         # 9) Liquidity & Depth
-        top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1)
-        top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1)
+        # 9) Liquidity & Depth
+        top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1) if bids and isinstance(bids[0], list) else 0.0
+        top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1) if asks and isinstance(asks[0], list) else 0.0
         total_lot_volume = bid_volume + ask_volume
-        if total_lot_volume > 0:
-            top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume, 1)
-        else:
-            top_of_book_liquidity = 0.0
+        top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume,
+                                    1.0) if total_lot_volume > 0 else 0.0
 
         max_depth = 10
         depth = min(len(best_asks), len(best_bids)) / max_depth  # in [0,1]
 
         # 10) MLOFI
-        if (self.previous_bids is None and self.previous_asks is None) \
-                or (self.previous_bids is None) or (self.previous_asks is None):
+        if self.previous_bids is None or self.previous_asks is None or not bids or not asks:
             ml_ofi = [0.0] * self.mlofi_depth
         else:
-            ml_ofi = markets_agent_utils.get_ml_ofi(
-                bids[0],
-                self.previous_bids,
-                asks[0],
-                self.previous_asks
-            )[:self.mlofi_depth]
+            try:
+                ml_ofi = markets_agent_utils.get_ml_ofi(
+                    bids[0],
+                    self.previous_bids,
+                    asks[0],
+                    self.previous_asks
+                )[:self.mlofi_depth]
+            except Exception as e:
+                print(f"[Step {self.step_index}] MLOFI computation failed: {e}")
+                ml_ofi = [0.0] * self.mlofi_depth
+
             if len(ml_ofi) < self.mlofi_depth:
                 ml_ofi += [0.0] * (self.mlofi_depth - len(ml_ofi))
+
         ml_ofi = np.clip(np.array(ml_ofi) / self.parent_order_size, a_min=-1, a_max=1)
 
         # 11) Multi time OFI
@@ -661,8 +665,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         padded_ofi = np.clip(padded_ofi, -1, 1)  # now bounded to [-1, 1] (but might clip a lot)
 
         # Set references for next step
-        self.previous_bids = bids[0]
-        self.previous_asks = asks[0]
+        self.previous_bids = bids[0] if bids else None
+        self.previous_asks = asks[0] if asks else None
         self.previous_depth = depth
         self.last_spread = spread
 
@@ -826,8 +830,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         time_limit = mkt_open + self.first_interval + self.execution_window
 
         # Penalized if the agent does not finish the episode (not sure if this works though)
-        # if current_time <= time_limit:
-        #     update_reward -= 100_000 * (time_limit - current_time) / current_time
+        if current_time <= time_limit:
+            update_reward -= 100_000 * (time_limit - current_time) / current_time
         if current_time >= time_limit:
             update_reward -= self.terminal_inventory_penalty * abs((holdings ** 3)) / parent_order_size
 
