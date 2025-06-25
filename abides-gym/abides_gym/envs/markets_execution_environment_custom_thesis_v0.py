@@ -738,7 +738,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market = value_t
 
         # Trading PnL ---------------------------------------------------
-        tp_raw = self.compute_tpt(raw_state, mid_px)
+        tp_raw = max(0, self.compute_tpt(raw_state, mid_px))
 
         # Inventory / quote-centre costs --------------------------------
         ip_raw = self.inventory_penalty * holdings ** 2
