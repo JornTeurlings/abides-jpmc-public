@@ -738,13 +738,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.previous_marked_to_market = value_t
 
         # Trading PnL ---------------------------------------------------
-        tp_raw = max(0, self.compute_tpt(raw_state, mid_px))
+        tp_raw = max(0., self.compute_tpt(raw_state, mid_px))
 
         # Inventory / quote-centre costs --------------------------------
         ip_raw = self.inventory_penalty * holdings ** 2
-        res_px = 0.5 * (self.last_bid_action + self.last_ask_action)
-        target_res = mid_px - self.kappa * holdings
-        cp_raw = self.lambda_r * (res_px - target_res) ** 2
 
         # Fill-ratio bonus ---------------------------------------------
         fills = raw_state["internal_data"]["inter_wakeup_executed_orders"]
@@ -774,14 +771,12 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "TP": tp_raw,
             "FR": fr_raw,
             "IP": ip_raw,
-            "CP": cp_raw,
             "CL": bid_pen + ask_pen  # treat cliff as one cost component
         }
         self.custom_metrics_tracker.dp_t = dp_raw
         self.custom_metrics_tracker.tp_t = tp_raw
         self.custom_metrics_tracker.fr_t = fr_raw
         self.custom_metrics_tracker.ip_t = ip_raw
-        self.custom_metrics_tracker.cp_t = cp_raw
         self.custom_metrics_tracker.cl_t = bid_pen + ask_pen
         self.custom_metrics_tracker.bid_penalty = bid_pen
         self.custom_metrics_tracker.ask_penalty = ask_pen
@@ -830,8 +825,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         time_limit = mkt_open + self.first_interval + self.execution_window
 
         # Penalized if the agent does not finish the episode (not sure if this works though)
-        if current_time <= time_limit:
-            update_reward -= 100_000 * (time_limit - current_time) / current_time
         if current_time >= time_limit:
             update_reward -= self.terminal_inventory_penalty * abs((holdings ** 3)) / parent_order_size
 
@@ -841,9 +834,11 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 4) Normalization
         update_reward = update_reward
 
+        unfinished = -100 * (time_limit - current_time) / self.execution_window
+
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         # We manually give the rewards through the component normalizer
-        return 0.0
+        return unfinished
 
     @raw_state_pre_process
     def raw_state_to_done(self, raw_state: Dict[str, Any]) -> bool:
