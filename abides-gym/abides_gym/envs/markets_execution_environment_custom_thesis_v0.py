@@ -355,6 +355,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.dpt_weight: float = tuning_params.get('dpt_weight', 0.02)
         self.inventory_penalty: float = tuning_params.get("inventory_penalty", 1)
         self.terminal_inventory_penalty: float = tuning_params.get("terminal_inventory_penalty", 1)
+        self.execution_early_cancel: bool = tuning_params.get("execution_early_cancel", True)
         self.orders_submitted: int = 0
         self.previous_asks: list | None = None
         self.previous_bids: list | None = None
@@ -833,8 +834,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # 4) Normalization
         update_reward = update_reward
-
-        unfinished = -100 * (time_limit - current_time) / self.execution_window
+        unfinished = 0
+        if self.execution_early_cancel:
+            unfinished -= 100 * (time_limit - current_time) / self.execution_window
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         # We manually give the rewards through the component normalizer
