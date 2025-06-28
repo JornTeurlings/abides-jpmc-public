@@ -61,6 +61,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.self_play_agents: List[SelfPlayAgent] = None
         self.saved_models_location: str = saved_models_location
         self.environment_configuration: Dict[str, Any] = {}
+        self.step_tracker = 0
 
     def set_environment_configuration(self, env_config: Dict[str, Any]):
         self.environment_configuration = env_config
@@ -79,6 +80,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         """
 
         # get seed to initialize random states for ABIDES
+        self.step_tracker = 0
         seed = self.np_random.integers(low=0, high=2 ** 32, dtype="uint64") if not seed else seed
         # instanciate back ground config state
         background_config_args = self.background_config_pair[1]
@@ -218,6 +220,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         abides_action = self._map_action_space_to_ABIDES_SIMULATOR_SPACE(action)
 
         raw_state = self.kernel.runner((self.gym_agent, abides_action))
+        self.step_tracker += 1
         snap = raw_state
         self.state = self.raw_state_to_state(snap["result"])
 

@@ -987,7 +987,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
                 "reward_components": self.custom_metrics_tracker.reward_components,
                 "our_bid": bid_price,
                 "our_ask": ask_price,
-                "time": raw_state["internal_data"]["current_time"]
+                "time": raw_state["internal_data"]["current_time"],
+                "curr_step": self.step_tracker
             }
         else:
             return asdict(self.custom_metrics_tracker)
