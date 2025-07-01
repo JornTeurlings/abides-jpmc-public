@@ -42,7 +42,8 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
             market_data_buffer_length: int,
             first_interval: Optional[NanosecondTime] = None,
             saved_models_location: str = None,
-            autoreset: bool = False
+            autoreset: bool = False,
+            seed=None
     ) -> None:
         super().__init__(
             background_config_pair,
@@ -51,7 +52,8 @@ class AbidesGymMarketsEnv(AbidesGymCoreEnv, ABC):
             first_interval=first_interval,
             gymAgentConstructor=FinancialGymAgent,
             saved_models_location=saved_models_location,
-            autoreset=autoreset
+            autoreset=autoreset,
+            seed=seed
         )
         self.starting_cash: int = starting_cash
         self.market_data_buffer_length: int = market_data_buffer_length

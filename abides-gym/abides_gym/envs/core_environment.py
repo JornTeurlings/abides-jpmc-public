@@ -34,7 +34,8 @@ class AbidesGymCoreEnv(gym.Env, ABC):
             first_interval: Optional[NanosecondTime] = None,
             gymAgentConstructor=None,
             saved_models_location=None,
-            autoreset=False
+            autoreset=False,
+            seed=None
     ) -> None:
 
         self.autoreset = autoreset
@@ -51,7 +52,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.state_buffer_length: int = state_buffer_length
         self.gymAgentConstructor = gymAgentConstructor
 
-        self.seed()  # fix random seed if no seed specified
+        self.seed(seed)  # fix random seed if no seed specified
 
         self.state: Optional[np.ndarray] = None
         self.reward: Optional[float] = None

@@ -144,7 +144,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             background_config_extra_kvargs: Dict[str, Any] = {},
             saved_models_location: str | None = None,
             uses_beta: bool = False,
-            autoreset: bool = True
+            autoreset: bool = True,
+            seed: int = None
     ) -> None:
         if background_config == 'random':
             self.background_config = [
@@ -267,7 +268,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             market_data_buffer_length=self.market_data_buffer_length,
             first_interval=self.first_interval,
             saved_models_location=saved_models_location,
-            autoreset=autoreset
+            autoreset=autoreset,
+            seed=seed
         )
 
         # Action Space
