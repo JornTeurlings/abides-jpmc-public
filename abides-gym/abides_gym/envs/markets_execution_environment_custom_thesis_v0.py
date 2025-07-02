@@ -194,6 +194,12 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             "stable_mm",
             "structural_intelligent",
             "random",
+            "eval_exec_stress",
+            "eval_highvol_lowliq",
+            "eval_intelligent_skewed",
+            "eval_liquidityshock",
+            "eval_momentum_dominant",
+            "eval_structured_stable"
         ], "No correct config selected as config"
 
         assert (self.first_interval <= str_to_ns("16:00:00")) & (
