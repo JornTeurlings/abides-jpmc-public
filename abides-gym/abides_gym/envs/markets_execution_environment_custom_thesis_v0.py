@@ -844,7 +844,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         update_reward = update_reward
         unfinished = 0
         if self.execution_early_cancel:
-            unfinished -= 100 * (time_limit - current_time) / self.execution_window
+            unfinished -= 50 * (time_limit - current_time) / self.execution_window
 
         self.custom_metrics_tracker.late_penalty_reward = update_reward
         # We manually give the rewards through the component normalizer
