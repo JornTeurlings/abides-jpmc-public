@@ -757,7 +757,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             latest = fills[-1] if isinstance(fills[-1], list) else fills
             qty = sum(f.quantity for f in latest)
         fr_raw = self.fill_ratio_bonus * (
-                    qty / min(2 * self.order_fixed_size, total_volume)) if total_volume > 0 else 0.0
+                (qty / min(2 * self.order_fixed_size, total_volume)) - 0.3) if total_volume > 0 else 0.0
 
         # Spread cliff penalties (kept raw) -----------------------------
         mkt_bid = mid_px - self.last_spread / 2
