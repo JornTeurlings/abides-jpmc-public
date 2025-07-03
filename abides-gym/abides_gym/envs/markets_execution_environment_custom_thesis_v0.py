@@ -537,9 +537,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         bid_volume_raw = safe_get(raw_state, ["parsed_volume_data", "bid_volume"], 0.0)
         ask_volume_raw = safe_get(raw_state, ["parsed_volume_data", "ask_volume"], 0.0)
 
-        bid_volume = safe_list_last(bid_volume_raw)
-        ask_volume = safe_list_last(ask_volume_raw)
-
         # --- Internal State: Holdings and Timing ---
         holdings = safe_get(raw_state, ["internal_data", "holdings"], [0.0])
         holdings_pct = safe_list_last(holdings) / self.parent_order_size
@@ -624,10 +621,10 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
 
         # 9) Liquidity & Depth
-        # 9) Liquidity & Depth
-        top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1) if bids and isinstance(bids[0], list) else 0.0
-        top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1) if asks and isinstance(asks[0], list) else 0.0
-        total_lot_volume = bid_volume + ask_volume
+        top_bid_volume = markets_agent_utils.get_volume(safe_list_last(bids), depth=1)
+        top_ask_volume = markets_agent_utils.get_volume(safe_list_last(asks), depth=1)
+        total_lot_volume = markets_agent_utils.get_volume(safe_list_last(bids)) + \
+                           markets_agent_utils.get_volume(safe_list_last(asks))
         top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume,
                                     1.0) if total_lot_volume > 0 else 0.0
 
@@ -640,9 +637,9 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         else:
             try:
                 ml_ofi = markets_agent_utils.get_ml_ofi(
-                    bids[0],
+                    safe_list_last(bids),
                     self.previous_bids,
-                    asks[0],
+                    safe_list_last(asks),
                     self.previous_asks
                 )[:self.mlofi_depth]
             except Exception as e:
@@ -674,8 +671,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         padded_ofi = np.clip(padded_ofi, -1, 1)  # now bounded to [-1, 1] (but might clip a lot)
 
         # Set references for next step
-        self.previous_bids = bids[0] if bids else None
-        self.previous_asks = asks[0] if asks else None
+        self.previous_bids = bids[-1] if bids else None
+        self.previous_asks = asks[-1] if asks else None
         self.previous_depth = depth
         self.last_spread = spread
 
@@ -754,11 +751,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # Fill-ratio bonus ---------------------------------------------
         fills = raw_state["internal_data"]["inter_wakeup_executed_orders"]
+        total_volume = raw_state["parsed_volume_data"]["total_volume"]
         qty = 0
         if fills:
             latest = fills[-1] if isinstance(fills[-1], list) else fills
             qty = sum(f.quantity for f in latest)
-        fr_raw = self.fill_ratio_bonus * (qty / (2 * self.order_fixed_size) - 0.5)
+        fr_raw = self.fill_ratio_bonus * (
+                    qty / min(2 * self.order_fixed_size, total_volume)) if total_volume > 0 else 0.0
 
         # Spread cliff penalties (kept raw) -----------------------------
         mkt_bid = mid_px - self.last_spread / 2
