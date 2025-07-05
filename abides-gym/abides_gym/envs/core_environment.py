@@ -84,7 +84,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.step_tracker = 0
         seed = self.np_random.integers(low=0, high=2 ** 32, dtype="uint64") if not seed else seed
         # instanciate back ground config state
-        background_config_args = self.background_config_pair[1]
+        background_config_args = deepcopy(self.background_config_pair[1])
         background_config_args.update(
             {"seed": seed, **self.extra_background_config_kvargs}
         )
