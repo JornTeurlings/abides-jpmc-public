@@ -89,6 +89,9 @@ class AbidesGymCoreEnv(gym.Env, ABC):
             {"seed": seed, **self.extra_background_config_kvargs}
         )
 
+        algo = background_config_args.get('algorithm', 'PPO')
+        background_config_args.pop("algorithm")
+
         if isinstance(self.background_config_pair[0], List):
             random_env = np.random.choice(self.background_config_pair[0])
             background_config_state = random_env(**background_config_args)
@@ -114,8 +117,6 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 if options:
 
                     model_chosen = np.random.choice(options)
-
-                    algo = background_config_args.get('algorithm', 'PPO')
 
                     if algo == 'PPO':
                         model = PPO.load(models_dir + '/' + model_chosen)
