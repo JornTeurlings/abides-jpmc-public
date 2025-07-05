@@ -8,7 +8,7 @@ from gymnasium.utils import seeding
 import os, psutil
 import gc
 import torch as th
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 
 from abides_core import Kernel, NanosecondTime
 from abides_core.generators import InterArrivalTimeGenerator
@@ -115,7 +115,12 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
                     model_chosen = np.random.choice(options)
 
-                    model = PPO.load(models_dir + '/' + model_chosen)
+                    algo = background_config_args.get('algorithm', 'PPO')
+
+                    if algo == 'PPO':
+                        model = PPO.load(models_dir + '/' + model_chosen)
+                    else:
+                        model = SAC.load(models_dir + '/' + model_chosen)
                     # 2. Make sure the correct configuration is given along
                     # 3. Make sure the model is unzipped and given as is to the network as a module
                     # 4. Continue executiing
