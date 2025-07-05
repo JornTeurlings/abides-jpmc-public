@@ -922,15 +922,13 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         # 2) Last Known best bid
         bids = safe_get(parsed_mkt_data, ["bids"], [])
         best_bid = (
-            bids[0][0] if isinstance(bids, list) and bids and isinstance(bids[0], list) and bids[
-                0] else last_transaction
+            bids[0][0] if isinstance(bids, list) and len(bids) > 0 else last_transaction
         )
 
         # 3) Last Known best ask
         asks = safe_get(parsed_mkt_data, ["asks"], [])
         best_ask = (
-            asks[0][0] if isinstance(asks, list) and asks and isinstance(asks[0], list) and asks[
-                0] else last_transaction
+            asks[0][0] if isinstance(asks, list) and len(asks) > 0 else last_transaction
         )
 
         # 4) Current Time
@@ -961,7 +959,7 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             bid_price, ask_price, reserv = self.compute_bid_ask_reservation(self.last_action_1, self.last_action_2,
                                                                             extra_info=True)
         spread_width = ask_price - bid_price
-        market_spread = self.last_spread
+        market_spread = best_ask - best_bid if best_ask > best_bid else self.last_spread
 
         if self.debug_mode:
             return {
