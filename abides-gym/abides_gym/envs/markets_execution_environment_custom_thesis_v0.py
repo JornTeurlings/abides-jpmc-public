@@ -419,6 +419,17 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.direct_action = self.environment_configuration.get('direct_action', False)
         self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
 
+    def set_self_play(self, self_play_on: bool):
+        """
+        Set the self play mode from outside the environment
+        Args:
+            self_play_on:
+
+        Returns:
+
+        """
+        super().set_self_play_mode(self_play_on)
+
     def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[
         int, int, float | None]:
         """

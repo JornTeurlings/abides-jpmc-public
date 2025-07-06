@@ -63,9 +63,14 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         self.saved_models_location: str = saved_models_location
         self.environment_configuration: Dict[str, Any] = {}
         self.step_tracker = 0
+        self._model_cache: Dict[str, Tuple[float, Any]] = {}
+        self.self_play_on = False
 
     def set_environment_configuration(self, env_config: Dict[str, Any]):
         self.environment_configuration = env_config
+
+    def set_self_play_mode(self, self_play_on: bool):
+        self.self_play_on = self_play_on
 
     def reset(self,
               *,
@@ -103,7 +108,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
 
         self_play_agents = []
         agents = []
-        if background_config_args.get('n_self_play_agents', 0) > 0 and self.saved_models_location:
+        if self.self_play_on and background_config_args.get('n_self_play_agents', 0) > 0 and self.saved_models_location:
             n = len(background_config_state["agents"])
             for i in range(background_config_args['n_self_play_agents']):
                 # 1. Get the random network from the saved_models
@@ -117,11 +122,17 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 if options:
 
                     model_chosen = np.random.choice(options)
+                    model_path = os.path.join(models_dir, model_chosen)
+                    mtime = os.path.getmtime(model_path)
+                    cached = self._model_cache.get(model_path)
 
-                    if algo == 'PPO':
-                        model = PPO.load(models_dir + '/' + model_chosen)
+                    if (cached is None) or (cached[0] < mtime):
+                        # Not cached, or file has been replaced on disk → (re)load
+                        model = PPO.load(model_path) if algo == 'PPO' else SAC.load(model_path)
+                        self._model_cache[model_path] = (mtime, model)
                     else:
-                        model = SAC.load(models_dir + '/' + model_chosen)
+                        _, model = cached
+
                     # 2. Make sure the correct configuration is given along
                     # 3. Make sure the model is unzipped and given as is to the network as a module
                     # 4. Continue executiing
