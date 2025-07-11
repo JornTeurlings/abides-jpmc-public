@@ -11,11 +11,11 @@ from abides_core.generators import InterArrivalTimeGenerator, ConstantTimeGenera
 from abides_core.utils import str_to_ns
 from abides_markets.orders import Order
 
-from .self_core_background_agent import SelfCoreBackgroundAgent
+from .financial_gym_agent import FinancialGymAgent
 import abides_markets.agents.utils as markets_agent_utils
 
 
-class SelfPlayAgent(SelfCoreBackgroundAgent):
+class SelfPlayAgent(FinancialGymAgent):
     raw_state_pre_process = markets_agent_utils.ignore_buffers_decorator
     raw_state_to_state_pre_process = (
         markets_agent_utils.ignore_mkt_data_buffer_decorator
@@ -29,7 +29,7 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             nn_model: stable_baselines3.common.base_class.BaseAlgorithm,
             environment_configuration: Dict[str, Any],
             subscribe_freq: int = int(1e8),
-            subscribe: float = True,
+            subscribe: bool = True,
             subscribe_num_levels: int = 10,
             wakeup_interval_generator: InterArrivalTimeGenerator = ConstantTimeGenerator(
                 step_duration=str_to_ns("1min")
@@ -43,7 +43,7 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             random_state: Optional[np.random.RandomState] = None,
     ) -> None:
         super().__init__(
-            id,
+            id=id,
             symbol=symbol,
             starting_cash=starting_cash,
             log_orders=log_orders,
@@ -121,32 +121,13 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
         # Load the model here
         self.model: stable_baselines3.common.base_class.BaseAlgorithm = nn_model
 
-    def act_on_wakeup(self) -> Dict:
-        """
-        Computes next wakeup time, computes the new raw_state and clears the internal step buffers.
-        Returns the raw_state to the abides gym environment (outside of the abides simulation) where the next action will be selected.
-
-        Returns:
-            - the raw_state dictionary that will be processed in the abides gym subenvironment
-        """
-        # compute the state (returned to the Gym Env)
-        # wakeup logic
-        wake_time = (
-                self.current_time + self.wakeup_interval_generator.next()
-        )  # generates next wakeup time
-        self.set_wakeup(wake_time)
-        self.update_raw_state()
-        raw_state = deepcopy(self.get_raw_state())
-        self.new_step_reset()
-        # return non None value so the kernel catches it and stops
-        return raw_state
-
-    def submit_actions(self) -> None:
+    def submit_actions(self) -> Optional[list]:
         # 1. Get the raw_state (make sure its updated beforehand)
         raw_state = self.get_raw_state()
 
-        if len(raw_state) > 0:
+        actions = None
 
+        if len(raw_state) > 0:
             # 2. Transform the raw_state to something meaningful
             state = self.raw_state_to_state(raw_state)
 
@@ -158,6 +139,7 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
 
             # 5. Forward the actions through the action mapper
             self.apply_actions(actions)
+        return actions
 
     def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
         """
@@ -232,8 +214,23 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             "size": self.order_fixed_size,
             "limit_price": ask_price
         })
-
         return instructions
+
+    # ------------------- price helpers (unchanged) --------------------
+    def compute_bid_ask_reservation(self, spread_v, res_v, extra=False):
+        mp = self.last_mid_price
+        reservation = mp - self.reservation_quote * mp * (2 * res_v - 1)
+        spread_v = min(max((spread_v + 1) / 2, 0), 1)
+        half = (spread_v * self.max_spread * mp) / 2
+        bid = round(reservation - half)
+        ask = round(reservation + half)
+        return (bid, ask, reservation) if extra else (bid, ask, None)
+
+    def compute_bid_ask_direct(self, bid_v, ask_v, extra=False):
+        mp = self.last_mid_price
+        bid = round(mp * (1 - bid_v))
+        ask = round(mp * (1 + ask_v))
+        return (bid, ask, None)
 
     @raw_state_to_state_pre_process
     def raw_state_to_state(self, raw_state: Dict[str, Any]) -> np.ndarray:
@@ -247,26 +244,29 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
         # ---------------------------
         # 0) Preliminary
         # ---------------------------
-        bids = raw_state["parsed_mkt_data"]["bids"]
-        asks = raw_state["parsed_mkt_data"]["asks"]
-        last_transactions = raw_state["parsed_mkt_data"]["last_transaction"]
+        # --- Market Data ---
+        bids = safe_get(raw_state, ["parsed_mkt_data", "bids"], [])
+        asks = safe_get(raw_state, ["parsed_mkt_data", "asks"], [])
+        last_transactions = safe_get(raw_state, ["parsed_mkt_data", "last_transaction"], [])
 
-        bid_volume = raw_state["parsed_volume_data"]["bid_volume"][-1]
-        ask_volume = raw_state["parsed_volume_data"]["ask_volume"][-1]
+        if not bids or not asks:
+            print(f'SP-{self.id}: Either bids or asks are empty')
 
-        # 1) Holdings (scaled)
-        holdings = raw_state["internal_data"]["holdings"]
-        holdings_pct = holdings[-1] / self.parent_order_size  # dimensionless in [-1,1]
+        # --- Volume Data ---
+        bid_volume_raw = safe_get(raw_state, ["parsed_volume_data", "bid_volume"], 0.0)
+        ask_volume_raw = safe_get(raw_state, ["parsed_volume_data", "ask_volume"], 0.0)
 
-        # 2) Timing
-        mkt_open = raw_state["internal_data"]["mkt_open"][-1]
-        current_time = raw_state["internal_data"]["current_time"][-1]
+        # --- Internal State: Holdings and Timing ---
+        holdings = safe_get(raw_state, ["internal_data", "holdings"], [0.0])
+        holdings_pct = safe_list_last(holdings) / self.parent_order_size
+
+        mkt_open = safe_list_last(safe_get(raw_state, ["internal_data", "mkt_open"], [0.0]))
+        current_time = safe_list_last(safe_get(raw_state, ["internal_data", "current_time"], [0.0]))
+
         time_from_parent_arrival = current_time - mkt_open - self.first_interval
-
-        # assert (current_time >= mkt_open + self.first_interval), (
-        #     "Agent has woken up earlier than its first interval"
-        # )
-
+        assert (current_time >= mkt_open + self.first_interval), (
+            "Agent has woken up earlier than its first interval"
+        )
         time_limit = self.execution_window
         time_pct = time_from_parent_arrival / time_limit  # dimensionless in [0,1]
 
@@ -278,14 +278,13 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             markets_agent_utils.get_imbalance(b, a, depth=None)
             for (b, a) in zip(bids, asks)
         ]
-        imbalance_all = imbalances_all[-1]  # typically in [-1,1]
+        imbalance_all = max(min(imbalances_all[-1] if len(imbalances_all) > 0 else 0, 1), -1)  # typically in [-1,1]
 
         # 5) Mid Prices + Price Impact
         mid_prices = [
             markets_agent_utils.get_mid_price(bid, ask, lt)
             for (bid, ask, lt) in zip(bids, asks, last_transactions)
         ]
-        mid_price = mid_prices[-1]  # current mid
 
         # 6) Best bids / asks
         best_bids = [
@@ -297,13 +296,22 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             for (a, mp) in zip(asks, mid_prices)
         ]
 
-        self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
-        # Scale mid_price to ~ 1 range if needed
-        scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around -1
+        # need to verify they exist
+        if bids and asks:
+            self.last_mid_price = (best_asks[-1] + best_bids[-1]) / 2
+            # Scale mid_price to ~ 1 range if needed
+            scaled_mid_price = self.last_mid_price / self.scale_price  # dimensionless around 1
+        else:
+            scaled_mid_price = self.last_mid_price / self.scale_price
 
+        scaled_mid_price = max(0, min(scaled_mid_price, 10))
         # Spread as fraction of mid
-        spreads = np.array(best_asks) - np.array(best_bids)
-        spread = spreads[-1] / self.last_mid_price  # dimensionless relative to mid_price < 1/2
+        if bids and asks:
+            spread = (best_asks[-1] - best_bids[-1]) / (
+                self.last_mid_price if self.last_mid_price > 0 else self.scale_price)
+        else:
+            spread = self.last_spread
+        spread = np.clip(spread, 0.0, 1.0)  # Optional but recommended
 
         # 7) Log returns
         # Replace raw differences with log(m_i / m_(i-1))
@@ -312,8 +320,14 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
 
         # Pad
         padded_returns = np.zeros(self.state_history_length - 1, dtype=np.float32)
+
         last_k = len(log_returns)
-        padded_returns[-last_k:] = log_returns if last_k > 0 else padded_returns
+        if last_k > 0:
+            padded_returns[-last_k:] = log_returns
+
+        padded_returns = np.clip(padded_returns, -10, 10)
+
+        padded_returns = np.nan_to_num(padded_returns, nan=0.0, posinf=10.0, neginf=-10.0)
 
         # 8) Short term vol from log returns
         # e.g. std of the last 10 log returns
@@ -321,35 +335,42 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
             short_term_vol = np.std(log_returns[-10:])
         else:
             short_term_vol = 0.0
-        # (Optional) Clip outliers if needed
+
         clip_vol = 1
         short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
 
         # 9) Liquidity & Depth
-        top_bid_volume = markets_agent_utils.get_volume(bids[0], depth=1)
-        top_ask_volume = markets_agent_utils.get_volume(asks[0], depth=1)
-        total_lot_volume = bid_volume + ask_volume
-        if total_lot_volume > 0:
-            top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume, 1)
+        if bids and asks:
+            top_bid_volume = markets_agent_utils.get_volume(safe_list_last(bids), depth=1)
+            top_ask_volume = markets_agent_utils.get_volume(safe_list_last(asks), depth=1)
+            total_lot_volume = markets_agent_utils.get_volume(safe_list_last(bids)) + \
+                               markets_agent_utils.get_volume(safe_list_last(asks))
+            top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume,
+                                        1.0) if total_lot_volume > 0 else 0.0
         else:
-            top_of_book_liquidity = 0.0
+            top_of_book_liquidity = 0
 
         max_depth = 10
         depth = min(len(best_asks), len(best_bids)) / max_depth  # in [0,1]
 
         # 10) MLOFI
-        if (self.previous_bids is None and self.previous_asks is None) \
-                or (self.previous_bids is None) or (self.previous_asks is None):
+        if self.previous_bids is None or self.previous_asks is None or not bids or not asks:
             ml_ofi = [0.0] * self.mlofi_depth
         else:
-            ml_ofi = markets_agent_utils.get_ml_ofi(
-                bids[0],
-                self.previous_bids,
-                asks[0],
-                self.previous_asks
-            )[:self.mlofi_depth]
+            try:
+                ml_ofi = markets_agent_utils.get_ml_ofi(
+                    safe_list_last(bids),
+                    self.previous_bids,
+                    safe_list_last(asks),
+                    self.previous_asks
+                )[:self.mlofi_depth]
+            except Exception as e:
+                print(f"[MLOFI computation failed: {e}")
+                ml_ofi = [0.0] * self.mlofi_depth
+
             if len(ml_ofi) < self.mlofi_depth:
                 ml_ofi += [0.0] * (self.mlofi_depth - len(ml_ofi))
+
         ml_ofi = np.clip(np.array(ml_ofi) / self.parent_order_size, a_min=-1, a_max=1)
 
         # 11) Multi time OFI
@@ -372,9 +393,10 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
         padded_ofi = np.clip(padded_ofi, -1, 1)  # now bounded to [-1, 1] (but might clip a lot)
 
         # Set references for next step
-        self.previous_bids = bids[0]
-        self.previous_asks = asks[0]
+        self.previous_bids = bids[-1] if bids else None
+        self.previous_asks = asks[-1] if asks else None
         self.previous_depth = depth
+        self.last_spread = spread
 
         # 12) Build final state vector
         # Keep your enumerated structure, but use dimensionless/log scaled features
@@ -393,3 +415,18 @@ class SelfPlayAgent(SelfCoreBackgroundAgent):
                                   + padded_returns.tolist(), dtype=np.float32)
 
         return computed_state.reshape(self.num_state_features, 1)
+
+
+def safe_get(dct, keys, default=None):
+    """Recursively get a nested dictionary key with fallback."""
+    for key in keys:
+        if isinstance(dct, dict) and key in dct:
+            dct = dct[key]
+        else:
+            return default
+    return dct
+
+
+def safe_list_last(item, default=0.0):
+    """Return last item of list or fallback."""
+    return item[-1] if isinstance(item, list) and item else item if isinstance(item, (int, float)) else default

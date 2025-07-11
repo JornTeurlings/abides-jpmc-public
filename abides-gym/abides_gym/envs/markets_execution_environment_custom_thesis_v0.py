@@ -632,12 +632,15 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         short_term_vol = float(np.clip(short_term_vol, 0.0, clip_vol))
 
         # 9) Liquidity & Depth
-        top_bid_volume = markets_agent_utils.get_volume(safe_list_last(bids), depth=1)
-        top_ask_volume = markets_agent_utils.get_volume(safe_list_last(asks), depth=1)
-        total_lot_volume = markets_agent_utils.get_volume(safe_list_last(bids)) + \
-                           markets_agent_utils.get_volume(safe_list_last(asks))
-        top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume,
-                                    1.0) if total_lot_volume > 0 else 0.0
+        if bids and asks:
+            top_bid_volume = markets_agent_utils.get_volume(safe_list_last(bids), depth=1)
+            top_ask_volume = markets_agent_utils.get_volume(safe_list_last(asks), depth=1)
+            total_lot_volume = markets_agent_utils.get_volume(safe_list_last(bids)) + \
+                               markets_agent_utils.get_volume(safe_list_last(asks))
+            top_of_book_liquidity = min((top_bid_volume + top_ask_volume) / total_lot_volume,
+                                        1.0) if total_lot_volume > 0 else 0.0
+        else:
+            top_of_book_liquidity = 0
 
         max_depth = 10
         depth = min(len(best_asks), len(best_bids)) / max_depth  # in [0,1]

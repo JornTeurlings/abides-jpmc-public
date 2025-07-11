@@ -276,6 +276,7 @@ def build_config(
     )
     # LATENCY
 
+    agent_count += n_self_play_agents
     latency_model = generate_latency_model(agent_count)
     default_computation_delay = 50  # 50 nanoseconds
 

@@ -101,7 +101,7 @@ class Kernel:
 
         self.self_play_agents: List[Agent] = list(
             filter(
-                lambda agent: "SelfCoreBackgroundAgent" in [c.__name__ for c in agent.__class__.__bases__],
+                lambda agent: "SelfPlayAgent" == agent.__class__.__name__,
                 agents
             )
         )

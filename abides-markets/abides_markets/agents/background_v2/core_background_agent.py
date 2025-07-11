@@ -258,6 +258,7 @@ class CoreBackgroundAgent(TradingAgent):
         order_status = self.order_status
         mkt_open = self.mkt_open
         mkt_close = self.mkt_close
+        agent_id = self.id
         internal_data = {
             "holdings": holdings,
             "cash": cash,
@@ -270,6 +271,7 @@ class CoreBackgroundAgent(TradingAgent):
             "order_status": order_status,
             "mkt_open": mkt_open,
             "mkt_close": mkt_close,
+            "agent_id": agent_id
         }
         return internal_data
 

@@ -64,7 +64,7 @@ def build_config(
         mm_window_size="adaptive",
         mm_pov=0.025,
         mm_num_ticks=10,
-        mm_wake_up_freq="30s",
+        mm_wake_up_freq="60s",
         mm_min_order_size=1,
         mm_skew_beta=0,
         mm_price_skew=4,
@@ -320,6 +320,7 @@ def build_config(
         seed=np.random.randint(low=0, high=2 ** 32, dtype="uint64")
     )
     # LATENCY
+    agent_count += n_self_play_agents
     latency_model = generate_latency_model(agent_count)
 
     default_computation_delay = 50  # 50 nanoseconds
