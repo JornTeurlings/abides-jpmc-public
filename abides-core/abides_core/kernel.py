@@ -296,10 +296,6 @@ class Kernel:
                there is no gym experimental agent, then it is None.
         """
         # run an action on a given agent before resuming queue: to be used to take exp agent action before resuming run
-        if agent_actions is not None:
-            exp_agent, action_list = agent_actions
-            exp_agent.apply_actions(action_list)
-
         for sp_agent in self.self_play_agents:
             # Over here, we let the SelfPlayAgent use its raw_state to:
             # 1. Get the raw_state
@@ -309,6 +305,10 @@ class Kernel:
             # 5. Push these through a similar method as _map_ABIDES_to_gym
             # 6. Messages should now be inside the message list
             sp_agent.submit_actions()
+            
+        if agent_actions is not None:
+            exp_agent, action_list = agent_actions
+            exp_agent.apply_actions(action_list)
 
         # Process messages until there aren't any (at which point there never can
         # be again, because agents only "wake" in response to messages), or until
