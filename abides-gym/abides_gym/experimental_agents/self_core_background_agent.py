@@ -272,6 +272,7 @@ class SelfCoreBackgroundAgent(SelfTradingAgent):
             "order_status": order_status,
             "mkt_open": mkt_open,
             "mkt_close": mkt_close,
+            "agent_id": self.id
         }
         return internal_data
 

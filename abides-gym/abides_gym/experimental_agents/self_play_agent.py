@@ -117,6 +117,7 @@ class SelfPlayAgent(FinancialGymAgent):
         self.previous_asks: list | None = None
         self.previous_bids: list | None = None
         self.previous_depth: int = 0
+        self.uses_beta: bool = False
 
         # Load the model here
         self.model: stable_baselines3.common.base_class.BaseAlgorithm = nn_model
@@ -140,47 +141,6 @@ class SelfPlayAgent(FinancialGymAgent):
             # 5. Forward the actions through the action mapper
             self.apply_actions(actions)
         return actions
-
-    def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[int, int, float | None]:
-        """
-        Function for calculating the bid-ask spread based on the input
-        Args:
-            spread_val: x in (0, 1) to indicate how wide the spread will be
-            res_val: y in (0, 1) to indicate how far off the mid-price we will quote our mid-price
-
-        Returns: The bid-price and ask-price that will be quoted
-
-        """
-        mid_price = self.last_mid_price  # ~100,000
-
-        # Reservation Price
-        reservation_price = mid_price - self.reservation_quote * mid_price * (2 * res_val - 1)
-
-        # Spread (split in half around the reservation_price)
-        spread_val = min(max((spread_val + 1) / 2, 0), 1)
-        half_spread = (spread_val * self.max_spread * mid_price) / 2.0
-
-        bid_price = round(reservation_price - half_spread)
-        ask_price = round(reservation_price + half_spread)
-
-        return bid_price, ask_price, reservation_price if extra_info else None
-
-    def compute_bid_ask_direct(self, bid_val, ask_val) -> tuple[int, int, float | None]:
-        """
-        Function for calculating the bid-ask spread based on the input
-        Args:
-            bid_val: x in (0, 1) to indicate how much extra from the mid_price bid will be
-            ask_val: y in (0, 1) to indicate how much extra from the mid_price ask will be
-
-        Returns: The bid-price and ask-price that will be quoted
-
-        """
-        mid_price = self.last_mid_price  # ~100,000
-
-        bid_price = round(mid_price * (1 - bid_val))
-        ask_price = round(mid_price * (1 + ask_val))
-
-        return bid_price, ask_price, None
 
     def convert_actions_to_abides(self, action: list):
         """
@@ -217,20 +177,61 @@ class SelfPlayAgent(FinancialGymAgent):
         return instructions
 
     # ------------------- price helpers (unchanged) --------------------
-    def compute_bid_ask_reservation(self, spread_v, res_v, extra=False):
-        mp = self.last_mid_price
-        reservation = mp - self.reservation_quote * mp * (2 * res_v - 1)
-        spread_v = min(max((spread_v + 1) / 2, 0), 1)
-        half = (spread_v * self.max_spread * mp) / 2
-        bid = round(reservation - half)
-        ask = round(reservation + half)
-        return (bid, ask, reservation) if extra else (bid, ask, None)
+    def compute_bid_ask_reservation(self, spread_val, res_val, extra_info=False) -> tuple[
+        int, int, float | None]:
+        """
+        Function for calculating the bid-ask spread based on the input
+        Args:
+            spread_val: x in (-1, 1) to indicate how wide the spread will be
+            res_val: y in (-1, 1) to indicate how far off the mid-price we will quote our mid-price
 
-    def compute_bid_ask_direct(self, bid_v, ask_v, extra=False):
-        mp = self.last_mid_price
-        bid = round(mp * (1 - bid_v))
-        ask = round(mp * (1 + ask_v))
-        return (bid, ask, None)
+        Returns: The bid-price and ask-price that will be quoted
+
+        """
+        mid_price = self.last_mid_price  # ~100,000
+
+        if not self.uses_beta:
+            # This means it uses TanH so it has to be shifted up by 1 and divided by 2
+            spread_val = (spread_val + 1) / 2  # We need to stay in the range of (0, 1)
+        else:
+            res_val = 2 * res_val - 1  # We need to go to (-1, 1)
+
+        # Reservation Price
+        reservation_price = mid_price - self.max_spread * res_val
+
+        # Spread (split in half around the reservation_price)
+        # We need to ensure at least a width of 1
+        spread_val = min(max(spread_val, 0.1), 1)
+        half_spread = (spread_val * self.max_spread) / 2.0
+
+        bid_price = round(reservation_price - half_spread)
+        ask_price = round(reservation_price + half_spread)
+
+        if bid_price == ask_price:
+            ask_price += 1
+
+        return bid_price, ask_price, reservation_price if extra_info else None
+
+    def compute_bid_ask_direct(self, bid_val, ask_val) -> tuple[int, int, float | None]:
+        """
+        Function for calculating the bid-ask spread based on the input
+        Args:
+            bid_val: x in (0, 1) to indicate how much extra from the mid_price bid will be
+            ask_val: y in (0, 1) to indicate how much extra from the mid_price ask will be
+
+        Returns: The bid-price and ask-price that will be quoted
+
+        """
+        if not self.uses_beta:
+            bid_val = (bid_val + 1) / 2
+            ask_val = (ask_val + 1) / 2
+
+        mid_price = self.last_mid_price  # ~100,000
+
+        bid_price = round(mid_price * (1 - bid_val))
+        ask_price = round(mid_price * (1 + ask_val))
+
+        return bid_price, ask_price, None
 
     @raw_state_to_state_pre_process
     def raw_state_to_state(self, raw_state: Dict[str, Any]) -> np.ndarray:
