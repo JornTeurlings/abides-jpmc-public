@@ -110,6 +110,7 @@ class AbidesGymCoreEnv(gym.Env, ABC):
         agents = []
         if self.self_play_on and background_config_args.get('n_self_play_agents', 0) > 0 and self.saved_models_location:
             n = len(background_config_state["agents"])
+            logger.info(f"Self-Play {n} active agent")
             for i in range(background_config_args['n_self_play_agents']):
                 # 1. Get the random network from the saved_models
                 #   - Where are we going to store this?
