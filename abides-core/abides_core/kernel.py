@@ -14,6 +14,7 @@ from .latency_model import LatencyModel
 from .utils import fmt_ts, str_to_ns
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 
 class Kernel:
@@ -305,7 +306,7 @@ class Kernel:
             # 5. Push these through a similar method as _map_ABIDES_to_gym
             # 6. Messages should now be inside the message list
             sp_agent.submit_actions()
-            
+
         if agent_actions is not None:
             exp_agent, action_list = agent_actions
             exp_agent.apply_actions(action_list)

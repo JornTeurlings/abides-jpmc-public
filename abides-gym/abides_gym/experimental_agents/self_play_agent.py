@@ -58,7 +58,6 @@ class SelfPlayAgent(FinancialGymAgent):
             subscribe_num_levels=subscribe_num_levels,
             subscribe_freq=subscribe_freq,
         )
-        self.last_mid_price = None
         self.symbol: str = symbol
         # Frequency of agent data subscription up in ns-1
         self.subscribe_freq: int = subscribe_freq
@@ -113,6 +112,7 @@ class SelfPlayAgent(FinancialGymAgent):
         self.max_spread = self.environment_configuration['max_spread']
         self.direct_action = self.environment_configuration.get('direct_action', False)
         self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
+        self.last_mid_price = self.scale_price
 
         self.previous_asks: list | None = None
         self.previous_bids: list | None = None

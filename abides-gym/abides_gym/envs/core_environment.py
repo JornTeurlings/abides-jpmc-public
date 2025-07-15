@@ -1,6 +1,7 @@
 from copy import deepcopy
 from abc import abstractmethod, ABC
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import zipfile
 
 import gymnasium as gym
 import numpy as np
@@ -116,39 +117,66 @@ class AbidesGymCoreEnv(gym.Env, ABC):
                 #   - Where are we going to store this?
                 #   - Has to be accessible in a central spot and since it will not be trained here we need a common PWD
                 # Get the location of the models
+
+                # … inside your reset() or init code …
+
                 models_dir = self.saved_models_location
-                # Get the models in the directory
-                options = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
-                # Choose any of the models
-                if options:
+                all_zips = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
 
-                    model_chosen = np.random.choice(options)
-                    model_path = os.path.join(models_dir, model_chosen)
-                    mtime = os.path.getmtime(model_path)
-                    cached = self._model_cache.get(model_path)
-
-                    if (cached is None) or (cached[0] < mtime):
-                        # Not cached, or file has been replaced on disk → (re)load
-                        model = PPO.load(model_path) if algo == 'PPO' else SAC.load(model_path)
-                        self._model_cache[model_path] = (mtime, model)
+                # Pre-filter out anything that isn't a valid .zip archive
+                valid_zips = []
+                for fname in all_zips:
+                    full_path = os.path.join(models_dir, fname)
+                    if zipfile.is_zipfile(full_path):
+                        valid_zips.append(fname)
                     else:
-                        _, model = cached
+                        logger.warning(f"Skipping non-zip or corrupt archive: {full_path}")
 
-                    # 2. Make sure the correct configuration is given along
-                    # 3. Make sure the model is unzipped and given as is to the network as a module
-                    # 4. Continue executiing
+                if not valid_zips:
+                    logger.warning(f"No valid ZIP models found in {models_dir}; skipping self-play agent creation.")
+                else:
+                    # Shuffle so we don’t always pick the same one first
+                    np.random.shuffle(valid_zips)
 
-                    new_sp_agent = SelfPlayAgent(
-                        n + i,
-                        "ABM",
-                        first_interval=self.first_interval,
-                        wakeup_interval_generator=self.wakeup_interval_generator,
-                        state_buffer_length=self.state_buffer_length,
-                        nn_model=model,
-                        environment_configuration=self.environment_configuration,
-                        **self.extra_gym_agent_kvargs
-                    )
-                    self_play_agents.append(new_sp_agent)
+                    model = None
+                    for fname in valid_zips:
+                        model_path = os.path.join(models_dir, fname)
+                        try:
+                            # check cache vs. disk
+                            mtime = os.path.getmtime(model_path)
+                            cached = self._model_cache.get(model_path)
+
+                            if (cached is None) or (cached[0] < mtime):
+                                # (re)load fresh
+                                model = PPO.load(model_path) if algo == 'PPO' else SAC.load(model_path)
+                                self._model_cache[model_path] = (mtime, model)
+                            else:
+                                # reuse
+                                model = cached[1]
+
+                            logger.info(f"Loaded self-play model: {fname}")
+
+                            # append agent immediately upon successful load
+                            new_sp_agent = SelfPlayAgent(
+                                n + i,
+                                "ABM",
+                                first_interval=self.first_interval,
+                                wakeup_interval_generator=self.wakeup_interval_generator,
+                                state_buffer_length=self.state_buffer_length,
+                                nn_model=model,
+                                environment_configuration=self.environment_configuration,
+                                **self.extra_gym_agent_kvargs
+                            )
+                            self_play_agents.append(new_sp_agent)
+                            break
+
+                        except Exception as e:
+                            logger.error(f"Failed to load {model_path}: {e!r}; trying next model.")
+                            continue
+
+                    if model is None:
+                        logger.warning(f"Could not load any valid model from {models_dir}; skipping self-play agent.")
+
         # instantiate gym agent and add it to config and gym object
         nextid = len(background_config_state["agents"]) + len(self_play_agents)
         gym_agent = self.gymAgentConstructor(
