@@ -112,7 +112,9 @@ class SelfPlayAgent(FinancialGymAgent):
         self.max_spread = self.environment_configuration['max_spread']
         self.direct_action = self.environment_configuration.get('direct_action', False)
         self.order_fixed_size = self.environment_configuration.get('order_fixed_size', 100)
+
         self.last_mid_price = self.scale_price
+        self.last_spread = 0
 
         self.previous_asks: list | None = None
         self.previous_bids: list | None = None
