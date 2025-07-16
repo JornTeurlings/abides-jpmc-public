@@ -765,7 +765,8 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
 
         # Fill-ratio bonus ---------------------------------------------
         fills = raw_state["internal_data"]["inter_wakeup_executed_orders"]
-        total_volume = raw_state["parsed_volume_data"]["total_volume"]
+        parsed_volume_data = raw_state.get('parsed_volume_data', {})
+        total_volume = safe_get(parsed_volume_data, 'total_volume', 0)
         qty = 0
         if fills:
             latest = fills[-1] if isinstance(fills[-1], list) else fills
