@@ -1,10 +1,3 @@
-# RMSC-4 (Reference Market Simulation Configuration):
-# - 1     Exchange Agent
-# - 2     Adaptive Market Maker Agents
-# - 102   Value Agents
-# - 12    Momentum Agents
-# - 1000  Noise Agents
-
 import os
 from datetime import datetime
 
