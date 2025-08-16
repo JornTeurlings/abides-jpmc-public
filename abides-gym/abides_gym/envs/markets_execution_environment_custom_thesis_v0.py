@@ -35,47 +35,69 @@ def safe_list_last(item, default=0.0):
     return item[-1] if isinstance(item, list) and item else item if isinstance(item, (int, float)) else default
 
 
-class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
+class MMakrExecutionEnv(AbidesGymMarketsEnv):
     """
-    Execution V0 environment. It defines one of the ABIDES-Gym-markets environment.
-    This environment presents an example of the algorithmic order execution problem.
-    The agent has either an initial inventory of the stocks it tries to trade out of or no initial inventory and
-    tries to acquire a target number of shares. The goal is to realize this task while minimizing transaction cost from spreads
-     and market impact. It does so by splitting the parent order into several smaller child orders.
+    MMakr Execution Environment for Market Making and Algorithmic Execution.
 
-    Arguments:
-        - background_config: the handcrafted agents configuration used for the environment
-        - mkt_close: time the market day ends
-        - timestep_duration: how long between 2 wakes up of the gym experimental agent
-        - starting_cash: cash of the agents at the beginning of the simulation
-        - order_fixed_size: size of the order placed by the experimental gym agent
-        - state_history_length: length of the raw state buffer
-        - market_data_buffer_length: length of the market data buffer
-        - first_interval: how long the simulation is run before the first wake up of the gym experimental agent
-        - parent_order_size: Total size the agent has to execute (either buy or sell).
-        - execution_window: Time length the agent is given to proceed with 𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟𝑆𝑖𝑧𝑒execution.
-        - direction: direction of the 𝑝𝑎𝑟𝑒𝑛𝑡𝑂𝑟𝑑𝑒𝑟 (buy or sell)
-        - not_enough_reward_update: it is a constant penalty per non-executed share at the end of the𝑡𝑖𝑚𝑒𝑊𝑖𝑛𝑑𝑜𝑤
-        - just_quantity_reward_update: update reward if all order is completed
-        - reward_mode: can use a dense of sparse reward formulation
-        - done_ratio: ratio (mark2market_t/starting_cash) that defines when an episode is done (if agent has lost too much mark to market value)
-        - debug_mode: arguments to change the info dictionary (lighter version if performance is an issue)
-        - background_config_extra_kvargs: dictionary of extra key value  arguments passed to the background config builder function
+    This environment wraps ABIDES-Gym into a custom formulation that matches the
+    MMakr design introduced in the thesis. It is tailored to the order execution
+    and market making problem under self-play and domain randomisation.
 
-    Daily Investor V0:
-        - Action Space:
-            - LMT variable_size variable_price
-            - Hold
-        - State Space:
-            - holdings_pct
-            - time_pct
-            - diff_pct
-            - imbalance_all
-            - imbalance_5
-            - price_impact
-            - spread
-            - direction
-            - returns
+    Overview
+    --------
+    The agent is tasked with executing a *parent order* (buy or sell) within a fixed
+    execution window while minimising execution cost, market impact, and inventory
+    risk. The environment provides a structured action and state space that allows
+    RL algorithms to learn execution strategies.
+
+    Key Features
+    ------------
+    - **Action space**:
+        - 2D continuous vector in [-1, 1].
+        - Mapped either to reservation price & spread width (reservation mode),
+          or directly to bid/ask offsets (direct mode).
+        - Agent places limit orders on both sides of the book each step.
+
+    - **State space**:
+        - Dimension: (num_state_features, 1), configurable.
+        - Core features:
+            - Holdings fraction (executed quantity / parent order size).
+            - Time progress within execution window.
+            - Holdings–time deviation (diff_pct).
+            - Order book imbalance (full-depth and short-term).
+            - Mid-price, spread, short-term volatility.
+            - Top-of-book liquidity, depth.
+            - Multi-level Order Flow Imbalance (MLOFI).
+            - Lagged OFI features.
+            - Log returns history of mid-prices.
+
+    - **Rewards** (returned via reward components):
+        - ΔPnL (mark-to-market).
+        - Trading PnL (execution quality).
+        - Inventory penalties (quadratic cost).
+        - Fill ratio bonus (execution efficiency).
+        - Spread cliff penalties (pricing outside market range).
+        - Terminal inventory penalties (leftover volume at horizon).
+
+    - **Episode termination**:
+        - Out of inventory bounds
+        - End of execution window (truncated).
+        - Market close.
+
+    Usage
+    -----
+    Typical usage in training:
+        env = MMakrExecutionEnv(
+            background_config="rmsc04",
+            parent_order_size=1200,
+            execution_window="00:10:00",
+            tuning_params={"mlofi_depth": 5, "ofi_lag": 3}
+        )
+
+    Notes
+    -----
+    - Self-play can be enabled externally via giving non-zero background_config_extra_kvargs.n_self_play_agents.
+    - The environment is designed to be compatible with Stable-Baselines3.
     """
 
     raw_state_pre_process = markets_agent_utils.ignore_buffers_decorator
@@ -134,7 +156,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
             parent_order_size: int = 1200,
             scale_price: int = 100_000,
             execution_window: str = "00:10:00",
-            direction: str = "BUY",
             not_enough_reward_update: int = -100,
             too_much_reward_update: int = -80,
             just_quantity_reward_update: int = 0,
@@ -165,7 +186,6 @@ class SubGymMarketsExecutionEnvThesis_v0(AbidesGymMarketsEnv):
         self.first_interval: NanosecondTime = str_to_ns(first_interval)
         self.parent_order_size: int = parent_order_size
         self.execution_window: int = str_to_ns(execution_window)
-        self.direction: str = direction
         self.debug_mode: bool = debug_mode
         self.uses_beta = uses_beta
 

@@ -17,8 +17,8 @@ register(
 )
 
 register(
-    id="markets-execution-thesis",
-    entry_point=SubGymMarketsExecutionEnvThesis_v0
+    id="market-maker-mmakr-env",
+    entry_point=MMakrExecutionEnv
 )
 
 register(
